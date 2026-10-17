@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<!--
+  ============================================================================
+  HOME ASSISTANT LEGACY DASHBOARD
+  ----------------------------------------------------------------------------
+  Doel: draaien op een oude iPad met iOS 9 / Safari 9 (oud WebKit).
+        - Strikt ES5 (var, geen arrow functions, geen template literals)
+        - XMLHttpRequest i.p.v. fetch()
+        - Polling met setTimeout i.p.v. WebSockets
+        - Geen CSS Grid, geen CSS-variabelen, geen zware effecten
+        - Alles in 1 bestand: HTML + CSS + JS
+
+  SNELSTART
+  ---------
+  Draai je dit via Docker (zie docker-compose.yml)? Dan hoef je in dit bestand
+  niets aan te passen: vul HA_URL en HA_TOKEN in .env in, start de container en
+  stel daarna de entiteiten in via de knop "Instellingen" van het dashboard.
+
+  Draai je dit bestand los (bijv. in config/www/ van Home Assistant)? Zoek dan
+  onderaan in het <script>-blok naar "1. CONFIGURATIE" en vul in:
+        HA_URL  -> bv. 'http://192.168.1.10:8123'  (zonder slash aan het eind)
+        TOKEN   -> je Long-Lived Access Token
+        ENTITIES-> de kaartjes die je wilt tonen
+     (Laat HA_URL leeg als dit bestand op de HA-server zelf staat.)
+
+  WAAR KOMEN DE INSTELLINGEN VANDAAN?
+  -----------------------------------
+  Het dashboard kijkt in deze volgorde (het eerste dat iets oplevert, wint):
+    1. config.json -- geschreven door het instellingenscherm en bewaard in het
+       Docker-volume op /config. Bevat HA-adres, token, verversingstijd en de
+       entiteiten. Dit bestand mag je ook gewoon met de hand bewerken.
+    2. Dit bestand (HA_URL / TOKEN / POLL_SECONDS) en, bij Docker, de
+       omgevingsvariabelen HA_URL, HA_TOKEN en HA_POLL_SECONDS.
+    3. localStorage van de browser -- alleen als er GEEN config.json beschikbaar
+       is, bijvoorbeeld als dit bestand door Home Assistant zelf geserveerd
+       wordt. Het instellingenscherm vertelt altijd waar het bewaart.
+
+  In stap 1 en 2 blijft de opslag van de browser leeg; oude inhoud wordt
+  opgeruimd. In stap 3 bewaart het dashboard alles in localStorage.
+
+  WAAR HOSTEN (zelfde origin = geen CORS-gedoe)
+  ---------------------------------------------
+  * Op Home Assistant zelf: zet dit bestand in de map  config/www/  en open
+    op de iPad  http://<HA-adres>:8123/local/index.html
+    Laat HA_URL dan leeg -- het dashboard gebruikt automatisch het adres
+    waar de pagina vandaan komt.
+  * Via Docker (zie Dockerfile / docker-compose.yml) op bijv. poort 8080.
+    Voeg in dat geval dit toe aan configuration.yaml van Home Assistant en
+    herstart HA (anders blokkeert de browser de requests):
+          http:
+            cors_allowed_origins:
+              - "http://<ip-van-de-docker-host>:8080"
+  * Of met een simpele webserver:  python -m http.server 8080
+
+  LET OP / BEKEND
+  ---------------
+  * Open dit bestand NIET via file:// -- Safari blokkeert dan de verbinding.
+  * Draait HA op https, dan moet dit dashboard ook via https gehost worden.
+  * Draait dit bestand ZONDER het Docker-startscript (dus direct geserveerd),
+    dan blijven de placeholders voor de omgevingsvariabelen staan. Het
+    dashboard herkent dat en gebruikt dan localStorage (stap 3 hierboven).
+  * Een token staat leesbaar in de geserveerde pagina en/of in
+    config.json. Zet zo'n container daarom nooit openbaar op internet: hij is
+    bedoeld voor je eigen netwerk.
+  * Wisselen tussen "opslaan in een bestand" en "opslaan in de browser"? Dat
+    hangt af van het volume op /config en niet van een instelling. Zie de
+    melding bovenaan het instellingenscherm.
+  ============================================================================
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="format-detection" content="telephone=no">
+<meta name="robots" content="noindex">
+<title>Home Assistant &middot; Dashboard</title>
+<style>
+/* ==========================================================================
+   CSS  --  bewust simpel: float-layout, geen grid, geen variabelen,
+   geen blur/schaduwen, minimale repaints (traag op oude iPad CPU).
+   ========================================================================== */
+
+* { -webkit-box-sizing: border-box; box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #101316;
+  color: #e6eaed;
+}
+
+body {
+  font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.25;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: rgba(255, 255, 255, 0.10);
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* ------------------------------ topbar ------------------------------ */
+#topbar {
+  position: relative;
+  padding: 8px 10px 4px 10px;
+  background: #171b1f;
+  border-bottom: 1px solid #262c31;
+  min-height: 54px;
+}
+#topbar:after { content: ""; display: block; clear: both; }
+#topbar .title {
+  float: left;
+  font-size: 19px;
+  font-weight: 600;
+  color: #f2f5f7;
+  padding: 9px 0 0 2px;
+}
+#topbar .status {
+  float: left;
+  clear: left;
+  font-size: 12px;
+  color: #78848d;
+  padding: 3px 0 4px 2px;
+}
+#topbar .tools { float: right; }
+
+button.tb {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-block;
+  margin: 0 0 0 6px;
+  padding: 0 13px;
+  min-height: 40px;
+  line-height: 40px;
+  font-family: inherit;
+  font-size: 15px;
+  color: #e6eaed;
+  background: #262d33;
+  border: 1px solid #363f47;
+  border-radius: 7px;
+  cursor: pointer;
+}
+button.tb:active { background: #38424a; }
+
+/* ------------------------------ banner ------------------------------ */
+#banner {
+  display: none;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #ffe9e9;
+  background: #4a1f22;
+  border-bottom: 1px solid #6b2c31;
+}
+
+/* ------------------------------ kaarten ----------------------------- */
+#grid {
+  padding: 4px 4px 0 4px;
+}
+#grid:after { content: ""; display: block; clear: both; }
+#grid .empty {
+  padding: 24px 16px;
+  font-size: 15px;
+  color: #85929b;
+}
+
+.card {
+  float: left;
+  width: 48%;              /* 48% + 2% marge = 50% -> 2 kolommen */
+  margin: 1%;
+  min-height: 108px;
+  padding: 12px 14px 10px 14px;
+  background: #1a1f23;
+  border: 1px solid #272e34;
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.card .dot {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 11px;
+  height: 11px;
+  border-radius: 6px;
+  background: #3d464d;
+}
+.card .name {
+  font-size: 14px;
+  color: #93a0a9;
+  margin: 0 22px 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card .value {
+  font-size: 30px;
+  font-weight: 600;
+  color: #cfd8dd;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.card .sub {
+  font-size: 13px;
+  color: #7d8a93;
+  height: 17px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* statuskleuren: duidelijke feedback aan/uit */
+.card.on   { background: #10331f; border-color: #2d7a45; }
+.card.on .dot   { background: #45cf7c; }
+.card.on .value { color: #7dffb2; }
+.card.on .name  { color: #9ed8b5; }
+
+.card.off  { background: #1a1f23; }
+
+.card.unknown { opacity: 0.55; }
+.card.pending { opacity: 0.70; }
+.card.flash   { border-color: #5aa9e6; }
+
+/* sensoren: geen aan/uit, maar wel duidelijk leesbaar */
+.card.type-sensor { background: #17222b; border-color: #23343f; }
+.card.type-sensor .value { color: #8fd4ff; }
+
+/* eenmalige acties (scene/script) */
+.card.type-button { background: #212a31; }
+.card.type-button .dot { display: none; }
+.card.type-button .value { font-size: 21px; letter-spacing: 0; color: #ffd479; }
+
+/* grotere schermen: meer kolommen */
+@media (min-width: 680px)  { .card { width: 31.33%; } } /* 3 kolommen */
+@media (min-width: 1000px) { .card { width: 23%; } }    /* 4 kolommen */
+
+/* ------------------------------ toast ------------------------------- */
+#toast {
+  display: none;
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  margin-left: -150px;
+  width: 300px;
+  padding: 12px 10px;
+  text-align: center;
+  font-size: 15px;
+  color: #e6eaed;
+  background: #2c343b;
+  border: 1px solid #3d474f;
+  border-radius: 8px;
+  z-index: 60;
+}
+
+/* --------------------------- instellingen --------------------------- */
+#setup {
+  display: none;
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: #101316;
+  padding: 18px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 80;
+}
+#setup h1 { font-size: 20px; margin: 6px 0 10px 0; }
+#setup p {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #96a2ab;
+  margin: 8px 0 0 0;
+}
+#setup label {
+  display: block;
+  font-size: 13px;
+  color: #96a2ab;
+  margin: 18px 0 5px 0;
+}
+#setup input, #setup select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  padding: 12px 10px;
+  font-family: inherit;
+  font-size: 16px;
+  color: #e6eaed;
+  background: #1a1f23;
+  border: 1px solid #313a42;
+  border-radius: 7px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#setup code {
+  font-family: Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #a9d7f5;
+  background: #1a1f23;
+  padding: 1px 4px;
+  border-radius: 4px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#setup .row { margin-top: 24px; }
+#setup .btn-primary {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  color: #06210f;
+  background: #45cf7c;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+#setup .btn-secondary {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  color: #c8d2d9;
+  background: #232a31;
+  border: 1px solid #333c44;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* ------------------------- tabs: verbinding/entiteiten --------------- */
+#setup .tabs { margin: 0 0 2px 0; }
+#setup .tabs:after { content: ""; display: block; clear: both; }
+#setup .tab {
+  -webkit-appearance: none;
+  appearance: none;
+  float: left;
+  width: 49.5%;
+  min-height: 46px;
+  font-family: inherit;
+  font-size: 16px;
+  color: #c8d2d9;
+  background: #1c2228;
+  border: 1px solid #333c44;
+  border-radius: 8px;
+  cursor: pointer;
+}
+#setup .tab + .tab { margin-left: 1%; }
+#setup .tab.on { color: #06210f; background: #45cf7c; border-color: #45cf7c; font-weight: 600; }
+
+#setup .infobox {
+  margin: 14px 0 0 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #cfe6f5;
+  background: #16262f;
+  border: 1px solid #23414f;
+  border-radius: 8px;
+}
+#setup .infobox.warn { color: #ffe9c9; background: #3a2a12; border-color: #6b4d1c; }
+#setup .hint { font-size: 13px; color: #7d8a93; margin: 6px 0 0 0; line-height: 1.4; }
+
+/* ------------------------- entiteiten-editor ------------------------- */
+#setup .erow {
+  margin: 12px 0 0 0;
+  padding: 8px 12px 12px 12px;
+  background: #171d22;
+  border: 1px solid #2a323a;
+  border-radius: 8px;
+}
+#setup .erow.bad { border-color: #a04545; }
+#setup .erow-head { margin-bottom: 2px; }
+#setup .erow-head:after { content: ""; display: block; clear: both; }
+#setup .erow-title {
+  float: left;
+  max-width: 55%;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6eaed;
+  padding-top: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#setup .erow-tools { float: right; }
+#setup .mini {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  min-height: 38px;
+  margin-left: 4px;
+  font-family: inherit;
+  font-size: 16px;
+  color: #c8d2d9;
+  background: #232a31;
+  border: 1px solid #333c44;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#setup .mini.del { color: #ffb4b4; }
+
+#setup .erow label { margin: 9px 0 3px 0; }
+#setup .erow input, #setup .erow select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  padding: 9px 8px;
+  font-family: inherit;
+  font-size: 15px;
+  color: #e6eaed;
+  background: #10161a;
+  border: 1px solid #313a42;
+  border-radius: 6px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#setup .f2:after { content: ""; display: block; clear: both; }
+#setup .f2 > div { float: left; width: 49%; }
+#setup .f2 > div + div { margin-left: 2%; }
+#setup .f3 > div { width: 32%; }
+#setup .f3 > div + div { margin-left: 2%; }
+
+/* Keuzelijsten: appearance:none haalt het systeempijltje weg, dus tekenen we
+   er zelf een (data-URI, zodat het één bestand blijft). Deze regel staat
+   bewust onderaan: hij moet de background-shorthand van de regels hierboven
+   overschrijven. */
+#setup select, #setup .erow select {
+  background-image: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><path d="M1 1l5 5 5-5" fill="none" stroke="%23c8d2d9" stroke-width="2"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="title">Home</div>
+  <div class="tools">
+    <button type="button" class="tb" id="btnSettings">Instellingen</button>
+    <button type="button" class="tb" id="btnRefresh">Vernieuwen</button>
+  </div>
+  <div class="status" id="status">Opstarten...</div>
+</div>
+
+<div id="banner"></div>
+<div id="grid"></div>
+<div id="toast"></div>
+
+<div id="setup">
+  <h1>Dashboard instellen</h1>
+
+  <div class="tabs">
+    <button type="button" class="tab on" id="tabBtnConn">Verbinding</button>
+    <button type="button" class="tab" id="tabBtnEntities">Entiteiten</button>
+  </div>
+
+  <div id="infoBox" class="infobox" style="display:none"></div>
+
+  <div id="tabConn">
+    <label for="inUrl">Home Assistant adres</label>
+    <input type="url" id="inUrl" placeholder="http://192.168.1.10:8123" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="hint" id="urlHint"></p>
+
+    <label for="inToken">Long-Lived Access Token</label>
+    <input type="text" id="inToken" placeholder="eyJ0eXAiOiJKV1Qi..." autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="hint" id="tokenHint"></p>
+
+    <label for="inPoll">Status verversen (seconden)</label>
+    <input type="text" id="inPoll" placeholder="5" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="hint">Minimaal 2, standaard 5. Hoger = rustiger voor een oude iPad.</p>
+  </div>
+
+  <div id="tabEntities" style="display:none">
+    <p class="hint"><strong>Schakelaar</strong> = tik aan/uit &middot; <strong>Sensor</strong> = alleen weergeven &middot; <strong>Knop</strong> = scene of script &middot; <strong>Rolluik</strong> = open/dicht.</p>
+    <div id="entityList"></div>
+    <div class="row">
+      <button type="button" class="btn-secondary" id="btnAddEntity">+ Lege entiteit toevoegen</button>
+    </div>
+    <div id="pickerWrap">
+      <label for="entityPicker">Of kies direct uit Home Assistant</label>
+      <select id="entityPicker" disabled>
+        <option value="">Laden...</option>
+      </select>
+      <p class="hint">Kies een entiteit om er meteen een kaartje voor toe te voegen.</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <button type="button" class="btn-primary" id="btnSave">Wijzigingen opslaan</button>
+    <button type="button" class="btn-secondary" id="btnReset" style="display:none">Opgeslagen gegevens wissen</button>
+    <button type="button" class="btn-secondary" id="btnCancel">Sluiten</button>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   HOME ASSISTANT DASHBOARD  --  STRICT ES5 (iOS 9 / Safari 9)
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  /* ========================================================================
+     1. CONFIGURATIE  --  VUL HIER JE GEGEVENS IN
+     ------------------------------------------------------------------------
+     HA_URL : adres van Home Assistant, ZONDER slash aan het einde.
+              bv. 'http://192.168.1.10:8123'
+              Laat leeg ('') als dit bestand op de HA-server zelf staat
+              (map config/www/, geopend via .../local/index.html); dan wordt
+              automatisch hetzelfde adres gebruikt (geen CORS nodig).
+
+     TOKEN  : je Long-Lived Access Token.
+
+     POLL_SECONDS   : hoe vaak de status wordt opgehaald (seconden).
+     TIMEOUT_MS     : hoe lang op een antwoord wordt gewacht.
+
+     ENTITIES : de standaardlijst met kaartjes. Dit is alleen de BEGINWAARDE:
+       zodra je via het instellingenscherm entiteiten toevoegt of wijzigt, komt
+       die lijst in config.json (of in localStorage) te staan en telt deze lijst
+       hier niet meer mee. Laat hem staan als je geen Docker gebruikt en ook
+       niet via het instellingenscherm wilt werken.
+       type 'toggle' : lamp / switch / fan / input_boolean / automation
+                       -> tik op de kaart = aan/uit
+       type 'sensor' : alleen weergeven (temperatuur, vocht, binary_sensor)
+       type 'button' : eenmalige actie (scene, script)
+       type 'cover'  : rolluik / gordijn -> tik = open/dicht
+       Optioneel per entiteit: name, unit, decimals
+
+     De waarden hieronder worden bij het starten van de Docker-container
+     vervangen door de gelijknamige omgevingsvariabelen HA_URL, HA_TOKEN en
+     HA_POLL_SECONDS (zie docker-entrypoint.d/40-ha-dashboard-config.sh).
+     Laat ze staan als je geen Docker gebruikt; het dashboard herkent de
+     onvervangen placeholders en valt dan terug op het instellingenscherm.
+
+     WAT GAAT VOOR OP WAT?  (hoogste eerst)
+       1. config.json -- gevuld via het instellingenscherm (tab "Entiteiten"
+          / "Verbinding") of met de hand geschreven. Staat in een Docker-volume.
+       2. de waarden hierboven / omgevingsvariabelen van de container.
+       3. localStorage van de browser -- alleen als er geen config.json
+          beschikbaar is (bijv. als je dit bestand op HA zelf host).
+     ======================================================================== */
+  var CONFIG = {
+    HA_URL: '${HA_URL}',
+    TOKEN: '${HA_TOKEN}',
+
+    POLL_SECONDS: '${HA_POLL_SECONDS}',
+    TIMEOUT_MS: 8000,
+
+    ENTITIES: [
+      { id: 'light.woonkamer',               name: 'Woonkamer',       type: 'toggle' },
+      { id: 'light.keuken',                  name: 'Keuken',          type: 'toggle' },
+      { id: 'switch.kerstboom',              name: 'Kerstboom',       type: 'toggle' },
+      { id: 'scene.avond',                   name: 'Scene: avond',    type: 'button' },
+      { id: 'cover.garage',                  name: 'Garage',          type: 'cover'  },
+      { id: 'sensor.woonkamer_temperatuur',  name: 'Temperatuur',     type: 'sensor', decimals: 1 },
+      { id: 'sensor.woonkamer_luchtvochtigheid', name: 'Luchtvochtigheid', type: 'sensor' },
+      { id: 'binary_sensor.voordeur',        name: 'Voordeur',        type: 'sensor' }
+    ]
+  };
+  /* ===================== einde configuratie ===================== */
+
+
+  var CONFIG_PATH  = 'config.json';   /* relatief, werkt ook bij /local/index.html */
+  var RUNTIME_PATH = 'runtime.json';
+  var STORAGE_KEY  = 'ha-legacy-dashboard-config';
+  var MAX_ENTITIES = 40;
+  var ENTITY_ID_RE = /^[a-z_]+\.[a-z0-9_]+$/;
+
+  var app = {
+    url: '',
+    urlRaw: '',
+    token: '',
+    pollSeconds: 5,
+    entities: [],
+    /* 'server' = config.json op de server, 'device' = localStorage */
+    mode: 'device',
+    runtime: null,
+    serverConfig: null,
+    cards: [],
+    paused: false,
+    timer: null,
+    toastTimer: null,
+    stickyBanner: '',
+    /* editor-state */
+    editEntities: [],
+    editRows: [],
+    pickerById: {},
+    pickerLoaded: false
+  };
+
+  var dom = {};
+
+
+  /* ---------------------------------------------------------------- utils */
+
+  function makeEl(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text !== undefined && text !== null) { e.textContent = text; }
+    if (tag === 'button') { e.type = 'button'; }
+    return e;
+  }
+
+  function clearEl(el) {
+    while (el.firstChild) { el.removeChild(el.firstChild); }
+  }
+
+  function nowMs() { return (new Date()).getTime(); }
+
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+  function timeString() {
+    var d = new Date();
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function trim(s) {
+    if (s === null || s === undefined) { return ''; }
+    return String(s).replace(/^\s+|\s+$/g, '');
+  }
+
+  /* Maakt van een ingevuld adres een bruikbare basis-URL (zonder slash). */
+  function normalizeUrl(u) {
+    u = trim(u);
+    if (u === '') {
+      if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+        return window.location.protocol + '//' + window.location.host;
+      }
+      return '';
+    }
+    while (u.length > 1 && u.charAt(u.length - 1) === '/') {
+      u = u.substring(0, u.length - 1);
+    }
+    return u;
+  }
+
+  function displayName(rec) {
+    return rec.cfg.name || rec.attrs.friendly_name || rec.cfg.id;
+  }
+
+  /* Leest een waarde die uit een omgevingsvariabele kan komen.
+     Een onvervangen placeholder (${...}) telt als "niet ingesteld", zodat
+     het bestand ook zonder Docker-startscript gewoon blijft werken. */
+  function envValue(raw) {
+    var v = trim(raw);
+    if (v === '' || v.indexOf('${') > -1) { return ''; }
+    return v;
+  }
+
+
+  /* ------------------------------------------------------- config-bestand */
+  /* config.json (in het Docker-volume) is de baas. Lukt dat niet, dan vallen
+     we terug op de waarden in dit bestand en anders op localStorage. */
+
+  function isList(v) {
+    return !!v && typeof v === 'object' && typeof v.length === 'number';
+  }
+
+  function hasStr(o, k) {
+    return !!o && typeof o === 'object' && typeof o[k] === 'string';
+  }
+
+  function pickToken(a, b) {
+    if (typeof a === 'string' && trim(a) !== '') { return trim(a); }
+    return (typeof b === 'string') ? trim(b) : '';
+  }
+
+  function pickPoll(a, b) {
+    var n = parseInt(a, 10);
+    if (isNaN(n)) { n = parseInt(b, 10); }
+    if (isNaN(n) || n < 2 || n > 3600) { n = 5; }
+    return n;
+  }
+
+  function validType(t) {
+    if (t === 'sensor' || t === 'button' || t === 'cover' || t === 'toggle') { return t; }
+    return 'toggle';
+  }
+
+  /* Maakt van (mogelijk met de hand geschreven) JSON een schone lijst. */
+  function cleanEntities(list) {
+    var out = [];
+    if (!isList(list)) { return out; }
+    for (var i = 0; i < list.length && out.length < MAX_ENTITIES; i++) {
+      var e = list[i];
+      if (!e || typeof e !== 'object') { continue; }
+      var id = trim(e.id);
+      if (id === '') { continue; }
+      var item = { id: id, type: validType(e.type) };
+      if (hasStr(e, 'name') && trim(e.name) !== '') { item.name = trim(e.name); }
+      if (hasStr(e, 'unit') && trim(e.unit) !== '') { item.unit = trim(e.unit); }
+      var dec = parseInt(e.decimals, 10);
+      if (!isNaN(dec) && dec >= 0 && dec <= 4) { item.decimals = dec; }
+      out.push(item);
+    }
+    return out;
+  }
+
+  function loadRuntime(cb) {
+    sameOriginJson('GET', RUNTIME_PATH, null, function (rt) {
+      app.runtime = (rt && typeof rt === 'object' && !isList(rt)) ? rt : null;
+      cb();
+    }, function () {
+      app.runtime = null;
+      cb();
+    });
+  }
+
+  function loadServerConfig(cb) {
+    sameOriginJson('GET', CONFIG_PATH, null, function (cfg) {
+      app.serverConfig = (cfg && typeof cfg === 'object' && !isList(cfg)) ? cfg : null;
+      cb();
+    }, function () {
+      app.serverConfig = null;
+      cb();
+    });
+  }
+
+  function readStored() {
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) { return JSON.parse(raw); }
+    } catch (e) { /* localStorage kan uit staan */ }
+    return null;
+  }
+
+  /* Berekent de effectieve instellingen uit de drie bronnen. */
+  function applyEffectiveConfig() {
+    var bakedUrl   = envValue(CONFIG.HA_URL);
+    var bakedToken = envValue(CONFIG.TOKEN);
+    var bakedPoll  = parseInt(envValue(CONFIG.POLL_SECONDS), 10);
+    var sc = app.serverConfig || {};
+    var st = {};
+    var url, token, poll, entities;
+
+    app.mode = (app.runtime && app.runtime.configFile === true) ? 'server' : 'device';
+
+    if (app.mode === 'server') {
+      /* Belofte: in server-modus komt er niets in localStorage terecht. */
+      clearStoredConfig();
+      url      = hasStr(sc, 'ha_url') ? sc.ha_url : bakedUrl;
+      token    = pickToken(sc.ha_token, bakedToken);
+      poll     = pickPoll(sc.poll_seconds, bakedPoll);
+      entities = isList(sc.entities) ? sc.entities : CONFIG.ENTITIES;
+    } else {
+      var stored = readStored();
+      if (stored && typeof stored === 'object') { st = stored; }
+      url = hasStr(st, 'ha_url') ? st.ha_url : (hasStr(st, 'url') ? st.url : bakedUrl);
+      token = pickToken(hasStr(st, 'ha_token') ? st.ha_token : st.token, bakedToken);
+      poll = pickPoll(st.poll_seconds, bakedPoll);
+      entities = isList(st.entities) ? st.entities : CONFIG.ENTITIES;
+    }
+
+    app.urlRaw = trim(url);
+    app.url = normalizeUrl(url);
+    app.token = token;
+    app.pollSeconds = poll;
+    app.entities = cleanEntities(entities);
+  }
+
+  function storeLocal(payload) {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function clearStoredConfig() {
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch (e) { /* niets */ }
+  }
+
+
+  /* ------------------------------------------------- XHR voor eigen server */
+  /* Leest/schrijft config.json en runtime.json: zelfde origin, geen token. */
+  function sameOriginJson(method, path, body, onOk, onFail) {
+    var finished = false;
+
+    function done(ok, a, b) {
+      if (finished) { return; }
+      finished = true;
+      if (ok) {
+        if (onOk) { onOk(a); }
+      } else {
+        if (onFail) { onFail(a, b); }
+      }
+    }
+
+    var xhr = new XMLHttpRequest();
+    try {
+      xhr.open(method, path, true);
+    } catch (e) {
+      done(false, 0, 'open mislukt');
+      return;
+    }
+
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (body) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+    xhr.timeout = 6000;
+
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var data = null;
+        if (xhr.responseText) {
+          try { data = JSON.parse(xhr.responseText); } catch (e2) { data = null; }
+        }
+        done(true, data, xhr.status);
+      } else {
+        done(false, xhr.status, xhr.statusText);
+      }
+    };
+    xhr.ontimeout = function () { done(false, 0, 'timeout'); };
+    xhr.onerror   = function () { done(false, 0, 'netwerkfout'); };
+
+    try {
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e3) {
+      done(false, 0, 'verzenden mislukt');
+    }
+  }
+
+
+  /* ---------------------------------------------------------- XHR wrapper */
+  /* Geen fetch(): op iOS 9 is dat niet betrouwbaar aanwezig. */
+  function apiRequest(method, path, body, onOk, onFail) {
+    var finished = false;
+
+    function done(ok, a, b) {
+      if (finished) { return; }
+      finished = true;
+      if (ok) {
+        if (onOk) { onOk(a); }
+      } else {
+        if (onFail) { onFail(a, b); }
+      }
+    }
+
+    if (app.token === '') { done(false, 401, 'geen token'); return; }
+
+    var xhr = new XMLHttpRequest();
+    try {
+      xhr.open(method, app.url + path, true);
+    } catch (e) {
+      done(false, 0, 'open mislukt');
+      return;
+    }
+
+    xhr.setRequestHeader('Authorization', 'Bearer ' + app.token);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (body) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+    xhr.timeout = CONFIG.TIMEOUT_MS;
+
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var data = null;
+        if (xhr.responseText) {
+          try { data = JSON.parse(xhr.responseText); } catch (e2) { data = null; }
+        }
+        done(true, data, xhr.status);
+      } else {
+        done(false, xhr.status, xhr.statusText);
+      }
+    };
+    xhr.ontimeout = function () { done(false, 0, 'timeout'); };
+    xhr.onerror   = function () { done(false, 0, 'netwerkfout'); };
+    xhr.onabort   = function () { done(false, 0, 'afgebroken'); };
+
+    try {
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e3) {
+      done(false, 0, 'verzenden mislukt');
+    }
+  }
+
+
+  /* ------------------------------------------------------------- polling */
+  /* setInterval is vervangen door setTimeout-na-elke-ronde: zo lopen
+     verzoeken nooit door elkaar en blijft het rustig voor oude WebKit. */
+
+  function stopPolling() {
+    if (app.timer !== null) {
+      window.clearTimeout(app.timer);
+      app.timer = null;
+    }
+  }
+
+  function scheduleNext(delayMs) {
+    stopPolling();
+    app.timer = window.setTimeout(runPoll, delayMs);
+  }
+
+  function runPoll() {
+    app.timer = null;
+    if (app.paused || app.token === '') { return; }
+
+    apiRequest('GET', '/api/states', null, function (data) {
+      if (data && data.length !== undefined) { applyAllStates(data); }
+      setBanner(app.stickyBanner);
+      setStatus('Live \u00b7 bijgewerkt ' + timeString());
+      scheduleNext(app.pollSeconds * 1000);
+    }, function (status, msg) {
+      handlePollError(status, msg);
+      scheduleNext(pollErrorDelay(status));
+    });
+  }
+
+  function pollErrorDelay(status) {
+    if (status === 401 || status === 403) { return 20000; }
+    return 10000;
+  }
+
+  function handlePollError(status, msg) {
+    setStatus('Offline \u00b7 laatste poging ' + timeString());
+    if (status === 401 || status === 403) {
+      setBanner('Het access token is ongeldig of verlopen. Open "Instellingen" en voer een nieuw Long-Lived Access Token in.');
+    } else if (status === 0) {
+      setBanner('Geen verbinding met Home Assistant (' + app.url + '). Controleer het adres, het netwerk en of Home Assistant bereikbaar is.');
+    } else {
+      setBanner('Home Assistant gaf een fout terug: HTTP ' + status + (msg ? ' (' + msg + ')' : '') + '.');
+    }
+  }
+
+
+  /* ------------------------------------------------------ status verwerken */
+
+  function applyAllStates(states) {
+    var wanted = {};
+    var found = {};
+    var i;
+
+    for (i = 0; i < app.cards.length; i++) {
+      wanted[app.cards[i].cfg.id] = true;
+    }
+
+    /* 1x door de (mogelijk lange) lijst, alleen wat we nodig hebben bewaren */
+    for (i = 0; i < states.length; i++) {
+      var s = states[i];
+      if (s && wanted[s.entity_id] === true) { found[s.entity_id] = s; }
+    }
+
+    var t = nowMs();
+    for (i = 0; i < app.cards.length; i++) {
+      var rec = app.cards[i];
+      if (rec.pendingUntil > t) { continue; } /* net getikt: niet overschrijven */
+      var st = found[rec.cfg.id];
+      if (st) {
+        applyState(rec, st);
+      } else {
+        applyState(rec, { state: 'unavailable', attributes: {} });
+      }
+    }
+  }
+
+  function formatValue(raw, cfgItem) {
+    var s = String(raw);
+    if (s === 'unavailable' || s === 'unknown') { return '--'; }
+    if (s === 'on') { return 'AAN'; }
+    if (s === 'off') { return 'UIT'; }
+
+    var n = Number(s);
+    if (s !== '' && isFinite(n)) {
+      var dec = (cfgItem.decimals === undefined || cfgItem.decimals === null) ? 1 : cfgItem.decimals;
+      if (dec <= 0) { return String(Math.round(n)); }
+      var factor = Math.pow(10, dec);
+      return String(Math.round(n * factor) / factor);
+    }
+    return s;
+  }
+
+  function extraInfo(attrs) {
+    if (typeof attrs.brightness === 'number' && attrs.brightness > 0) {
+      return 'Helderheid ' + Math.round(attrs.brightness / 255 * 100) + '%';
+    }
+    if (typeof attrs.volume_level === 'number') {
+      return 'Volume ' + Math.round(attrs.volume_level * 100) + '%';
+    }
+    if (typeof attrs.percentage === 'number') {
+      return 'Percentage ' + attrs.percentage + '%';
+    }
+    return '';
+  }
+
+  function applyState(rec, st) {
+    rec.raw = st.state;
+    rec.attrs = st.attributes || {};
+
+    var raw = rec.raw;
+    var attrs = rec.attrs;
+    var unavailable = (raw === 'unavailable' || raw === 'unknown' || raw === null || raw === undefined);
+    var value = '--';
+    var sub = '';
+    var mode = 'unknown';
+    var i;
+
+    /* naam pas invullen zodra HA de friendly_name stuurt */
+    if (!rec.cfg.name && attrs.friendly_name) {
+      rec.nameEl.textContent = attrs.friendly_name;
+    }
+
+    if (rec.type === 'sensor') {
+      if (unavailable) {
+        mode = 'unknown';
+        value = '--';
+        sub = 'niet beschikbaar';
+      } else {
+        mode = 'neutral';
+        value = formatValue(raw, rec.cfg);
+        sub = rec.cfg.unit || attrs.unit_of_measurement || '';
+      }
+
+    } else if (rec.type === 'cover') {
+      if (unavailable) {
+        mode = 'unknown';
+        value = '--';
+        sub = 'niet beschikbaar';
+      } else {
+        var isOpen = (raw === 'open' || raw === 'opening');
+        mode = isOpen ? 'on' : 'off';
+        if (raw === 'open') { value = 'OPEN'; }
+        else if (raw === 'closed') { value = 'DICHT'; }
+        else { value = String(raw).toUpperCase(); }
+        if (attrs.current_position !== undefined && attrs.current_position !== null) {
+          sub = 'Positie ' + attrs.current_position + '%';
+        }
+      }
+
+    } else if (rec.type === 'button') {
+      mode = 'neutral';
+      value = 'UITVOEREN';
+      sub = unavailable ? 'niet beschikbaar' : '';
+
+    } else {
+      /* toggle: light, switch, fan, input_boolean, automation, ... */
+      if (unavailable) {
+        mode = 'unknown';
+        value = '--';
+        sub = 'niet beschikbaar';
+      } else {
+        var on = (raw === 'on' || raw === 'playing' || raw === 'home');
+        mode = on ? 'on' : 'off';
+        value = on ? 'AAN' : 'UIT';
+        sub = extraInfo(attrs);
+      }
+    }
+
+    rec.mode = mode;
+    rec.valueEl.textContent = value;
+    rec.subEl.textContent = sub;
+    renderCardClass(rec);
+  }
+
+  function renderCardClass(rec) {
+    var c = 'card type-' + rec.type;
+    if (rec.mode) { c = c + ' ' + rec.mode; }
+    if (rec.pendingUntil > nowMs()) { c = c + ' pending'; }
+    if (rec.flashing) { c = c + ' flash'; }
+    rec.el.className = c;
+  }
+
+
+  /* ------------------------------------------------------- grid opbouwen */
+
+  function buildCard(cfgItem) {
+    var rec = {
+      cfg: cfgItem,
+      type: cfgItem.type || 'toggle',
+      el: null, nameEl: null, valueEl: null, subEl: null,
+      mode: 'unknown',
+      raw: null,
+      attrs: {},
+      pendingUntil: 0,
+      flashing: false,
+      prevRaw: undefined
+    };
+
+    var el = makeEl('div', 'card type-' + rec.type);
+    el.setAttribute('role', 'button');
+
+    var dot = makeEl('span', 'dot');
+    var nameEl = makeEl('div', 'name', cfgItem.name || cfgItem.id);
+    var valueEl = makeEl('div', 'value', '--');
+    var subEl = makeEl('div', 'sub', '');
+
+    el.appendChild(dot);
+    el.appendChild(nameEl);
+    el.appendChild(valueEl);
+    el.appendChild(subEl);
+
+    rec.el = el;
+    rec.nameEl = nameEl;
+    rec.valueEl = valueEl;
+    rec.subEl = subEl;
+
+    /* 'click' werkt op iOS 9 prima bij grote touch-targets */
+    el.addEventListener('click', function () { handleTap(rec); }, false);
+
+    return rec;
+  }
+
+  function buildGrid() {
+    clearEl(dom.grid);
+    app.cards = [];
+
+    var list = app.entities;
+    if (!list || list.length === 0) {
+      dom.grid.appendChild(makeEl('div', 'empty',
+        'Nog geen entiteiten op dit dashboard. Open "Instellingen" en voeg ze toe op het tabblad "Entiteiten".'));
+      return;
+    }
+
+    for (var i = 0; i < list.length; i++) {
+      var rec = buildCard(list[i]);
+      app.cards.push(rec);
+      dom.grid.appendChild(rec.el);
+    }
+  }
+
+
+  /* -------------------------------------------------------------- acties */
+
+  function handleTap(rec) {
+    if (rec.type === 'sensor') { return; }                  /* alleen lezen */
+    if (rec.pendingUntil > nowMs()) { return; }              /* al bezig */
+
+    /* eenmalige actie (scene / script) */
+    if (rec.type === 'button') {
+      rec.flashing = true;
+      renderCardClass(rec);
+      window.setTimeout(function () { rec.flashing = false; renderCardClass(rec); }, 350);
+      callService('homeassistant', 'turn_on', { entity_id: rec.cfg.id }, null);
+      toast('Actie verzonden: ' + displayName(rec));
+      return;
+    }
+
+    /* rolluik / gordijn */
+    if (rec.type === 'cover') {
+      var isOpen = (rec.raw === 'open' || rec.raw === 'opening');
+      var service = isOpen ? 'close_cover' : 'open_cover';
+      rec.prevRaw = rec.raw;
+      rec.raw = isOpen ? 'closed' : 'open';
+      rec.pendingUntil = nowMs() + 8000;
+      applyState(rec, { state: rec.raw, attributes: rec.attrs });
+      callService('cover', service, { entity_id: rec.cfg.id }, rec);
+      return;
+    }
+
+    /* aan/uit schakelen: meteen visueel omzetten, dan bevestigen */
+    var wantOn = !(rec.raw === 'on' || rec.raw === 'playing' || rec.raw === 'home');
+    rec.prevRaw = rec.raw;
+    rec.raw = wantOn ? 'on' : 'off';
+    rec.pendingUntil = nowMs() + 3000;
+    applyState(rec, { state: rec.raw, attributes: rec.attrs });
+    callService('homeassistant', wantOn ? 'turn_on' : 'turn_off', { entity_id: rec.cfg.id }, rec);
+  }
+
+  function callService(domain, service, data, rec) {
+    apiRequest('POST', '/api/services/' + domain + '/' + service, data,
+      function () {
+        if (rec) {
+          var delay = (rec.type === 'cover') ? 1500 : 700;
+          refreshEntity(rec, delay);
+        }
+      },
+      function (status) {
+        if (rec) {
+          /* mislukt: optimistische weergave terugdraaien */
+          rec.pendingUntil = 0;
+          if (rec.prevRaw !== undefined && rec.prevRaw !== null) { rec.raw = rec.prevRaw; }
+          applyState(rec, { state: rec.raw, attributes: rec.attrs });
+        }
+        toast(status === 0 ? 'Actie mislukt: geen verbinding' : 'Actie mislukt (HTTP ' + status + ')');
+      }
+    );
+  }
+
+  function refreshEntity(rec, delayMs) {
+    window.setTimeout(function () {
+      apiRequest('GET', '/api/states/' + encodeURIComponent(rec.cfg.id), null,
+        function (st) {
+          rec.pendingUntil = 0;
+          if (st && st.entity_id) { applyState(rec, st); }
+          else { renderCardClass(rec); }
+        },
+        function () {
+          rec.pendingUntil = 0;
+          renderCardClass(rec);
+        }
+      );
+    }, delayMs);
+  }
+
+
+  /* ---------------------------------------------------- meldingen in UI */
+
+  function setStatus(msg) { dom.status.textContent = msg; }
+
+  function setBanner(msg) {
+    if (!msg) {
+      if (dom.banner.style.display !== 'none') { dom.banner.style.display = 'none'; }
+      return;
+    }
+    dom.banner.textContent = msg;
+    dom.banner.style.display = 'block';
+  }
+
+  function toast(msg) {
+    dom.toast.textContent = msg;
+    dom.toast.style.display = 'block';
+    if (app.toastTimer !== null) { window.clearTimeout(app.toastTimer); }
+    app.toastTimer = window.setTimeout(function () {
+      dom.toast.style.display = 'none';
+      app.toastTimer = null;
+    }, 2200);
+  }
+
+
+  /* -------------------------------------------------------- instellingen-UI */
+
+  function showTab(which) {
+    if (which === 'entities') {
+      dom.tabConn.style.display = 'none';
+      dom.tabEntities.style.display = 'block';
+      dom.tabBtnConn.className = 'tab';
+      dom.tabBtnEntities.className = 'tab on';
+    } else {
+      dom.tabEntities.style.display = 'none';
+      dom.tabConn.style.display = 'block';
+      dom.tabBtnEntities.className = 'tab';
+      dom.tabBtnConn.className = 'tab on';
+    }
+  }
+
+  function openSetup() {
+    dom.inUrl.value = app.urlRaw;
+    dom.inToken.value = '';
+    dom.inPoll.value = String(app.pollSeconds);
+    if (app.urlRaw === '') {
+      dom.urlHint.textContent = (app.url !== '')
+        ? 'Leeg gelaten: er wordt automatisch ' + app.url + ' gebruikt (het adres waarop deze pagina staat).'
+        : 'Vul het adres van Home Assistant in, bijvoorbeeld http://192.168.1.10:8123';
+    } else {
+      dom.urlHint.textContent = 'Er wordt verbonden met ' + app.url + '.';
+    }
+    dom.inToken.placeholder = (app.token !== '')
+      ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (laat leeg om ongewijzigd te laten)'
+      : 'eyJ0eXAiOiJKV1Qi...';
+    dom.tokenHint.textContent = (app.token !== '')
+      ? 'Er is al een token ingesteld. Laat dit veld leeg om het te behouden.'
+      : 'Token aanmaken: in Home Assistant rechtsboven op je profiel -> Long-Lived Access Tokens -> Create Token.';
+
+    var info;
+    var warn = false;
+    if (app.mode === 'server') {
+      info = 'Deze instellingen worden opgeslagen in ' + CONFIG_PATH + ' in het volume dat aan /config gekoppeld is. Dat bestand blijft dus bewaard als de container opnieuw wordt gemaakt, en er wordt niets in de browser (localStorage) opgeslagen.';
+    } else if (!app.runtime) {
+      info = 'Deze pagina wordt niet door de dashboard-container geserveerd, dus worden de gegevens in deze browser bewaard (localStorage).';
+    } else if (app.runtime.configMounted !== true) {
+      info = 'Er is geen volume aan /config gekoppeld, dus worden de gegevens in deze browser bewaard (localStorage). Koppel een map aan /config (zie docker-compose.yml) om ze in een bestand te bewaren.';
+    } else {
+      warn = true;
+      info = 'De map /config is niet beschrijfbaar voor de container, dus worden de gegevens in deze browser bewaard (localStorage). Op Linux helpt: sudo chown -R 101:101 ./config';
+    }
+    dom.infoBox.textContent = info;
+    dom.infoBox.className = warn ? 'infobox warn' : 'infobox';
+    dom.infoBox.style.display = 'block';
+
+    dom.btnReset.style.display = (app.mode === 'device') ? 'block' : 'none';
+
+    renderEntityList(app.entities);
+    showTab('conn');
+    dom.setup.style.display = 'block';
+    window.scrollTo(0, 0);
+  }
+
+  function closeSetup() {
+    if (app.token === '') {
+      toast('Vul eerst een access token in');
+      return;
+    }
+    dom.setup.style.display = 'none';
+  }
+
+  /* ------------------------------------------------ entiteiten-editor ---- */
+
+  function copyEntity(e) {
+    var c = { id: e.id, name: e.name, type: e.type };
+    if (e.unit !== undefined) { c.unit = e.unit; }
+    if (e.decimals !== undefined) { c.decimals = e.decimals; }
+    return c;
+  }
+
+  function makeField(labelText, placeholder, value) {
+    var d = makeEl('div');
+    d.appendChild(makeEl('label', null, labelText));
+    var inp = makeEl('input');
+    inp.type = 'text';
+    inp.value = (value === undefined || value === null) ? '' : String(value);
+    if (placeholder) { inp.placeholder = placeholder; }
+    inp.setAttribute('autocapitalize', 'off');
+    inp.setAttribute('autocorrect', 'off');
+    inp.setAttribute('spellcheck', 'false');
+    d.appendChild(inp);
+    return { wrap: d, input: inp };
+  }
+
+  function makeTypeSelect(value) {
+    var sel = makeEl('select');
+    var opts = [
+      ['toggle', 'Schakelaar (aan/uit)'],
+      ['sensor', 'Sensor (alleen lezen)'],
+      ['button', 'Knop (scene/script)'],
+      ['cover', 'Rolluik / gordijn']
+    ];
+    for (var i = 0; i < opts.length; i++) {
+      var o = makeEl('option', null, opts[i][1]);
+      o.value = opts[i][0];
+      sel.appendChild(o);
+    }
+    sel.value = validType(value);
+    return sel;
+  }
+
+  function buildEntityRow(e, index) {
+    var wrap = makeEl('div', 'erow');
+
+    var head = makeEl('div', 'erow-head');
+    var title = makeEl('span', 'erow-title', (e.name || e.id || 'Nieuwe entiteit'));
+    var tools = makeEl('span', 'erow-tools');
+
+    var up = makeEl('button', 'mini', '\u2191');
+    up.title = 'Omhoog';
+    up.onclick = function () { moveEntity(index, -1); };
+
+    var down = makeEl('button', 'mini', '\u2193');
+    down.title = 'Omlaag';
+    down.onclick = function () { moveEntity(index, 1); };
+
+    var del = makeEl('button', 'mini del', '\u2715');
+    del.title = 'Verwijderen';
+    del.onclick = function () { removeEntity(index); };
+
+    tools.appendChild(up);
+    tools.appendChild(down);
+    tools.appendChild(del);
+    head.appendChild(title);
+    head.appendChild(tools);
+    wrap.appendChild(head);
+
+    var f2 = makeEl('div', 'f2');
+    var idF = makeField('Entiteit-ID', 'light.woonkamer', e.id);
+    var nameF = makeField('Naam', 'Woonkamer', e.name);
+    f2.appendChild(idF.wrap);
+    f2.appendChild(nameF.wrap);
+    wrap.appendChild(f2);
+
+    var f3 = makeEl('div', 'f2 f3');
+    var typeWrap = makeEl('div');
+    typeWrap.appendChild(makeEl('label', null, 'Type'));
+    var typeSel = makeTypeSelect(e.type);
+    typeWrap.appendChild(typeSel);
+    var unitF = makeField('Eenheid (sensor)', 'bijv. \u00b0C', e.unit);
+    var decF = makeField('Decimalen', 'bijv. 1', (e.decimals === undefined ? '' : e.decimals));
+    f3.appendChild(typeWrap);
+    f3.appendChild(unitF.wrap);
+    f3.appendChild(decF.wrap);
+    wrap.appendChild(f3);
+
+    function syncTitle() {
+      title.textContent = trim(nameF.input.value) || trim(idF.input.value) || 'Nieuwe entiteit';
+    }
+    nameF.input.onkeyup = syncTitle;
+    nameF.input.onchange = syncTitle;
+    idF.input.onkeyup = syncTitle;
+    idF.input.onchange = syncTitle;
+
+    var row = {
+      el: wrap,
+      idInput: idF.input,
+      nameInput: nameF.input,
+      typeSelect: typeSel,
+      unitInput: unitF.input,
+      decInput: decF.input
+    };
+    app.editRows.push(row);
+    return wrap;
+  }
+
+  function renderEntityList(list) {
+    app.editEntities = [];
+    for (var i = 0; i < list.length; i++) { app.editEntities.push(copyEntity(list[i])); }
+    drawEntityList();
+  }
+
+  function drawEntityList() {
+    clearEl(dom.entityList);
+    app.editRows = [];
+    if (app.editEntities.length === 0) {
+      dom.entityList.appendChild(makeEl('p', 'hint', 'Nog geen entiteiten. Voeg er hieronder een toe.'));
+      return;
+    }
+    for (var i = 0; i < app.editEntities.length; i++) {
+      dom.entityList.appendChild(buildEntityRow(app.editEntities[i], i));
+    }
+  }
+
+  /* Leest de invoervelden terug in app.editEntities. */
+  function commitRows() {
+    for (var i = 0; i < app.editRows.length; i++) {
+      var row = app.editRows[i];
+      var e = app.editEntities[i];
+      if (!row || !e) { continue; }
+      e.id = trim(row.idInput.value);
+      e.name = trim(row.nameInput.value);
+      e.type = validType(row.typeSelect.value);
+      e.unit = trim(row.unitInput.value);
+      var dec = trim(row.decInput.value);
+      if (dec === '') {
+        delete e.decimals;
+      } else {
+        var n = parseInt(dec, 10);
+        if (!isNaN(n)) { e.decimals = n; }
+      }
+    }
+  }
+
+  function addEntityRow() {
+    commitRows();
+    if (app.editEntities.length >= MAX_ENTITIES) {
+      toast('Maximaal ' + MAX_ENTITIES + ' entiteiten');
+      return;
+    }
+    app.editEntities.push({ id: '', name: '', type: 'toggle' });
+    drawEntityList();
+    var last = app.editRows[app.editRows.length - 1];
+    if (last && last.idInput.focus) { last.idInput.focus(); }
+  }
+
+  function moveEntity(index, delta) {
+    commitRows();
+    var target = index + delta;
+    if (target < 0 || target >= app.editEntities.length) { return; }
+    var tmp = app.editEntities[index];
+    app.editEntities[index] = app.editEntities[target];
+    app.editEntities[target] = tmp;
+    drawEntityList();
+  }
+
+  function removeEntity(index) {
+    commitRows();
+    app.editEntities.splice(index, 1);
+    drawEntityList();
+  }
+
+  /* ---------------------------------------------------------- HA-picker -- */
+
+  function stateLabel(st) {
+    if (st.attributes && typeof st.attributes.friendly_name === 'string' && st.attributes.friendly_name !== '') {
+      return st.attributes.friendly_name;
+    }
+    return st.entity_id;
+  }
+
+  function typeForDomain(domain) {
+    if (domain === 'scene' || domain === 'script' || domain === 'button' || domain === 'input_button') {
+      return 'button';
+    }
+    if (domain === 'cover' || domain === 'garage_door' || domain === 'device_tracker') {
+      return 'cover';
+    }
+    if (domain === 'light' || domain === 'switch' || domain === 'fan' || domain === 'input_boolean' ||
+        domain === 'automation' || domain === 'media_player' || domain === 'humidifier' || domain === 'siren') {
+      return 'toggle';
+    }
+    return 'sensor';
+  }
+
+  function entityFromState(st) {
+    var attrs = st.attributes || {};
+    var e = { id: st.entity_id, type: typeForDomain(String(st.entity_id).split('.')[0]) };
+    e.name = stateLabel(st);
+    if (e.type === 'sensor' && typeof attrs.unit_of_measurement === 'string' && attrs.unit_of_measurement !== '') {
+      e.unit = attrs.unit_of_measurement;
+      e.decimals = 1;
+    }
+    return e;
+  }
+
+  function loadPicker() {
+    if (app.pickerLoaded) { return; }
+    clearEl(dom.entityPicker);
+    var loading = makeEl('option', null, 'Laden...');
+    loading.value = '';
+    dom.entityPicker.appendChild(loading);
+    dom.entityPicker.disabled = true;
+
+    apiRequest('GET', '/api/states', null, function (states) {
+      app.pickerById = {};
+      var byDomain = {};
+      var domains = [];
+      var i, d, s;
+      if (isList(states)) {
+        for (i = 0; i < states.length; i++) {
+          s = states[i];
+          if (!s || typeof s.entity_id !== 'string' || s.entity_id.indexOf('.') === -1) { continue; }
+          app.pickerById[s.entity_id] = s;
+          d = s.entity_id.split('.')[0];
+          if (!byDomain[d]) { byDomain[d] = []; domains.push(d); }
+          byDomain[d].push(s);
+        }
+      }
+      domains.sort();
+      clearEl(dom.entityPicker);
+      var ph = makeEl('option', null, '-- kies een entiteit --');
+      ph.value = '';
+      dom.entityPicker.appendChild(ph);
+      for (i = 0; i < domains.length; i++) {
+        d = domains[i];
+        byDomain[d].sort(function (a, b) {
+          var la = stateLabel(a).toLowerCase();
+          var lb = stateLabel(b).toLowerCase();
+          if (la < lb) { return -1; }
+          if (la > lb) { return 1; }
+          return 0;
+        });
+        var group = document.createElement('optgroup');
+        group.label = d + ' (' + byDomain[d].length + ')';
+        for (var j = 0; j < byDomain[d].length; j++) {
+          var st = byDomain[d][j];
+          var opt = makeEl('option', null, stateLabel(st) + '  (' + st.entity_id + ')');
+          opt.value = st.entity_id;
+          group.appendChild(opt);
+        }
+        dom.entityPicker.appendChild(group);
+      }
+      dom.entityPicker.disabled = false;
+      app.pickerLoaded = true;
+    }, function (status) {
+      clearEl(dom.entityPicker);
+      var o = makeEl('option', null, (status === 401 || status === 403)
+        ? 'Geen toegang: controleer het access token'
+        : 'Kon de entiteiten niet ophalen');
+      o.value = '';
+      dom.entityPicker.appendChild(o);
+      dom.entityPicker.disabled = false;
+      toast('Entiteiten ophalen mislukt (HTTP ' + status + ')');
+    });
+  }
+
+  function onPickerChange() {
+    var id = dom.entityPicker.value;
+    if (!id || !app.pickerById[id]) { return; }
+    if (app.editEntities.length >= MAX_ENTITIES) {
+      toast('Maximaal ' + MAX_ENTITIES + ' entiteiten');
+      return;
+    }
+    commitRows();
+    app.editEntities.push(entityFromState(app.pickerById[id]));
+    drawEntityList();
+    dom.entityPicker.value = '';
+    dom.setup.scrollTop = dom.setup.scrollHeight;
+  }
+
+  /* ------------------------------------------------------------- opslaan -- */
+
+  function collectEntities() {
+    commitRows();
+    var out = [];
+    for (var i = 0; i < app.editEntities.length; i++) {
+      var e = app.editEntities[i];
+      var item = { id: e.id, type: validType(e.type) };
+      if (e.name && trim(e.name) !== '') { item.name = trim(e.name); }
+      if (e.unit && trim(e.unit) !== '') { item.unit = trim(e.unit); }
+      if (e.decimals !== undefined && e.decimals !== '') {
+        var n = parseInt(e.decimals, 10);
+        if (!isNaN(n) && n >= 0 && n <= 4) { item.decimals = n; }
+      }
+      out.push(item);
+    }
+    return out;
+  }
+
+  /* Markeert foute rijen en geeft de eerste fout terug (of ''). */
+  function validateRows(ents) {
+    var errors = [];
+    var seen = {};
+    var i;
+    for (i = 0; i < app.editRows.length; i++) {
+      var row = app.editRows[i];
+      var ent = ents[i];
+      var problems = [];
+      if (!ent || !ENTITY_ID_RE.test(ent.id)) {
+        problems.push('ongeldige entiteit-ID (voorbeeld: light.woonkamer)');
+      } else if (seen[ent.id]) {
+        problems.push('staat er al in');
+      }
+      if (ent) { seen[ent.id] = true; }
+      var decRaw = trim(row.decInput.value);
+      if (decRaw !== '' && (isNaN(parseInt(decRaw, 10)) || parseInt(decRaw, 10) < 0 || parseInt(decRaw, 10) > 4)) {
+        problems.push('decimalen moet 0 t/m 4 zijn');
+      }
+      row.el.className = problems.length ? 'erow bad' : 'erow';
+      if (problems.length) { errors.push('Regel ' + (i + 1) + ': ' + problems.join(' en ')); }
+    }
+    if (ents.length === 0) { errors.push('Voeg minimaal één entiteit toe'); }
+    return errors;
+  }
+
+  function saveSettings() {
+    var ents   = collectEntities();
+    var url    = trim(dom.inUrl.value);
+    var tokInp = trim(dom.inToken.value);
+    var poll   = parseInt(trim(dom.inPoll.value), 10);
+
+    if (isNaN(poll) || poll < 2 || poll > 3600) {
+      showTab('conn');
+      toast('Verversen moet tussen 2 en 3600 seconden zijn');
+      return;
+    }
+    if (app.token === '' && tokInp === '') {
+      showTab('conn');
+      toast('Vul een Long-Lived Access Token in');
+      return;
+    }
+    var errs = validateRows(ents);
+    if (errs.length) {
+      showTab('entities');
+      toast(errs[0]);
+      return;
+    }
+
+    var payload = {
+      version: 1,
+      ha_url: url,
+      poll_seconds: poll,
+      entities: ents
+    };
+    /* Token alleen in het bestand zetten als er iets nieuws is ingevuld of als
+       het er al in stond; een token uit een omgevingsvariabele blijft daar. */
+    if (tokInp !== '') { payload.ha_token = tokInp; }
+    else if (app.token !== '') { payload.ha_token = app.token; }
+
+    if (app.mode === 'server') {
+      sameOriginJson('PUT', CONFIG_PATH, payload, function () {
+        app.serverConfig = payload;
+        applyEffectiveConfig();
+        afterSave();
+      }, function (status) {
+        toast((status === 403 || status === 405)
+          ? 'Opslaan niet toegestaan: het configbestand is alleen-lezen'
+          : 'Opslaan mislukt (HTTP ' + status + ')');
+      });
+      return;
+    }
+
+    if (!storeLocal(payload)) {
+      toast('Opslaan in deze browser mislukt');
+      return;
+    }
+    applyEffectiveConfig();
+    afterSave();
+  }
+
+  function afterSave() {
+    dom.setup.style.display = 'none';
+    app.pickerLoaded = false;
+    setBanner(app.stickyBanner);
+    rebuildDashboard();
+    toast('Instellingen opgeslagen');
+  }
+
+  function resetSetup() {
+    if (app.mode !== 'device') { return; }
+    clearStoredConfig();
+    app.serverConfig = null;
+    applyEffectiveConfig();
+    dom.inUrl.value = app.urlRaw;
+    dom.inToken.value = '';
+    dom.inPoll.value = String(app.pollSeconds);
+    renderEntityList(app.entities);
+    toast('Opgeslagen gegevens gewist');
+  }
+
+
+  /* Bouwt het dashboard opnieuw op na een wijziging van de configuratie. */
+  function rebuildDashboard() {
+    buildGrid();
+    for (var i = 0; i < app.cards.length; i++) {
+      applyState(app.cards[i], { state: 'unknown', attributes: {} });
+    }
+
+    if (app.token === '') {
+      setStatus('Geen token ingesteld');
+      openSetup();
+      return;
+    }
+    setStatus('Verbinden...');
+    scheduleNext(50);
+  }
+
+
+  /* ---------------------------------------------------- energie besparen */
+  /* Polling pauzeren als de pagina niet zichtbaar is (scheelt accu/CPU). */
+
+  function setupVisibility() {
+    var hiddenProp = null;
+    var eventName = null;
+
+    if (typeof document.hidden !== 'undefined') {
+      hiddenProp = 'hidden';
+      eventName = 'visibilitychange';
+    } else if (typeof document.webkitHidden !== 'undefined') {
+      hiddenProp = 'webkitHidden';
+      eventName = 'webkitvisibilitychange';
+    }
+
+    if (!eventName || !document.addEventListener) { return; }
+
+    document.addEventListener(eventName, function () {
+      if (document[hiddenProp]) {
+        app.paused = true;
+        stopPolling();
+      } else {
+        app.paused = false;
+        scheduleNext(150);
+      }
+    }, false);
+  }
+
+
+  /* ------------------------------------------------------------------ init */
+
+  function init() {
+    dom.grid        = document.getElementById('grid');
+    dom.banner      = document.getElementById('banner');
+    dom.toast       = document.getElementById('toast');
+    dom.setup       = document.getElementById('setup');
+    dom.status      = document.getElementById('status');
+    dom.inUrl       = document.getElementById('inUrl');
+    dom.urlHint     = document.getElementById('urlHint');
+    dom.inToken     = document.getElementById('inToken');
+    dom.inPoll      = document.getElementById('inPoll');
+    dom.tokenHint   = document.getElementById('tokenHint');
+    dom.infoBox     = document.getElementById('infoBox');
+    dom.tabConn     = document.getElementById('tabConn');
+    dom.tabEntities = document.getElementById('tabEntities');
+    dom.tabBtnConn  = document.getElementById('tabBtnConn');
+    dom.tabBtnEntities = document.getElementById('tabBtnEntities');
+    dom.entityList  = document.getElementById('entityList');
+    dom.entityPicker = document.getElementById('entityPicker');
+    dom.btnReset    = document.getElementById('btnReset');
+
+    dom.banner.style.display = 'none';
+    dom.toast.style.display = 'none';
+    dom.setup.style.display = 'none';
+
+    document.getElementById('btnRefresh').onclick  = function () {
+      setStatus('Vernieuwen...');
+      scheduleNext(0);
+    };
+    document.getElementById('btnSettings').onclick = function () { openSetup(); };
+    document.getElementById('btnSave').onclick     = function () { saveSettings(); };
+    document.getElementById('btnCancel').onclick   = function () { closeSetup(); };
+    document.getElementById('btnAddEntity').onclick = function () { addEntityRow(); };
+    dom.btnReset.onclick     = function () { resetSetup(); };
+    dom.tabBtnConn.onclick   = function () { showTab('conn'); };
+    dom.tabBtnEntities.onclick = function () { showTab('entities'); loadPicker(); };
+    dom.entityPicker.onchange = function () { onPickerChange(); };
+
+    setupVisibility();
+
+    if (window.location.protocol === 'file:') {
+      app.stickyBanner = 'Dit bestand is geopend als lokaal bestand (file://). Safari blokkeert dan de verbinding met Home Assistant. Host het bestand via een webserver of zet het in de map config/www/ van Home Assistant.';
+      setBanner(app.stickyBanner);
+    }
+
+    /* Eerst kijken of deze server een beschrijfbaar configbestand heeft. */
+    setStatus('Configuratie laden...');
+    loadRuntime(function () {
+      loadServerConfig(function () {
+        applyEffectiveConfig();
+        rebuildDashboard();
+      });
+    });
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    window.setTimeout(init, 0);
+  } else {
+    document.addEventListener('DOMContentLoaded', init, false);
+  }
+})();
+</script>
+</body>
+</html>

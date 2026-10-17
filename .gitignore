@@ -1,0 +1,13 @@
+# Lokale configuratie met je Home Assistant-token: nooit committen.
+.env
+
+# De configuratie die het dashboard zelf wegschrijft. Kan een token bevatten.
+config/
+config.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,16 @@
+# Bestanden die niet in de image hoeven (bouwcontext klein houden).
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+*.md
+*.log
+
+# Secrets: nooit de bouwcontext in.
+.env
+.env.*
+
+# Door het dashboard zelf geschreven configuratie (kan een token bevatten).
+config/
+config.json

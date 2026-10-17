@@ -1,0 +1,60 @@
+# =============================================================================
+#  HA LEGACY DASHBOARD  --  docker compose
+#
+#  Gebruik:
+#    1. Kopieer .env.example naar .env
+#    2. Vul in .env je HA_URL en HA_TOKEN in (of laat ze leeg en vul ze in het
+#       instellingenscherm van het dashboard)
+#    3. docker compose up -d --build
+#    4. Open op de iPad: http://<ip-van-deze-pc>:8080/
+#
+#  De URL en het token uit .env worden bij het starten van de container in de
+#  pagina ingevuld. Ze belanden dus NIET in de localStorage van de browser.
+#
+#  De entiteiten (en desgewenst ook URL/token) stel je in via de knop
+#  "Instellingen" in het dashboard. Die keuzes komen in ./config/config.json
+#  terecht: een volume, zodat de container zelf wegwerpbaar blijft.
+# =============================================================================
+services:
+  ha-dashboard:
+    build: .
+    image: ha-legacy-dashboard:latest
+    container_name: ha-dashboard
+    restart: unless-stopped
+
+    # Host-poort instelbaar via .env (HA_DASHBOARD_PORT), standaard 8080.
+    ports:
+      - "${HA_DASHBOARD_PORT:-8080}:80"
+
+    # Deze waarden komen uit het bestand .env naast dit bestand (dat je zelf
+    # aanmaakt). Compose leest .env automatisch in.
+    # Zonder .env blijven ze leeg en toont het dashboard het instellingenscherm.
+    environment:
+      HA_URL: "${HA_URL:-}"
+      HA_TOKEN: "${HA_TOKEN:-}"
+      HA_POLL_SECONDS: "${HA_POLL_SECONDS:-5}"
+
+    # De configuratie van het dashboard leeft in dit volume, niet in de
+    # container. Zo kun je de container zonder verlies verwijderen en opnieuw
+    # bouwen. Het bestand ./config/config.json is ook met de hand te bewerken.
+    #
+    # Let op: daar kan een token in staan, dus zet ./config in .gitignore
+    # (dat is al gedaan).
+    #
+    # Liever geen map in je project? Gebruik dan een named volume:
+    #   volumes:
+    #     - ha-dashboard-config:/config
+    # ... en zet onderaan dit bestand:
+    #   volumes:
+    #     ha-dashboard-config:
+    volumes:
+      - ./config:/config
+
+    # Hardcode je ze liever direct (minder mooi, token staat dan in dit
+    # bestand)? Vervang dan het environment-blok hierboven door:
+    #   environment:
+    #     HA_URL: "http://192.168.1.10:8123"
+    #     HA_TOKEN: "jouw-long-lived-access-token"
+    #     HA_POLL_SECONDS: "5"
+
+    # De healthcheck zit al in het image (zie Dockerfile), dus hier niet nodig.
