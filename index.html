@@ -8,6 +8,9 @@
   ----------------------------------------------------------------------------
   Doel: draaien op een oude iPad met iOS 9 / Safari 9 (oud WebKit).
         - Strikt ES5 (var, geen arrow functions, geen template literals)
+        - Geen functiedeclaraties in een block: `if (x) { function f() {} }`
+          is in ES5 strict mode een SyntaxError en dan weigert iOS 9 het hele
+          script (gebruik `var f = function () {};`)
         - XMLHttpRequest i.p.v. fetch()
         - Polling met setTimeout i.p.v. WebSockets
         - Geen CSS Grid, geen CSS-variabelen, geen zware effecten
@@ -699,6 +702,33 @@ button.tb:active { background: #38424a; }
     <button type="button" class="btn-secondary" id="btnCancel">Sluiten</button>
   </div>
 </div>
+
+<!-- Vangnet: op iOS 9 is er geen foutconsole. Zonder dit blijft een fout
+     onzichtbaar (leeg scherm). Deze paar regels staan bewust vóór het grote
+     script, zodat ze ook een parse-fout daarvan kunnen melden. -->
+<script>
+(function () {
+  function show(text) {
+    var doc = document;
+    var box = doc.getElementById('jsFail');
+    if (!box) {
+      box = doc.createElement('div');
+      box.id = 'jsFail';
+      box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;' +
+        'background:#7a1f1f;color:#ffffff;font:13px/1.4 Helvetica,Arial,sans-serif;' +
+        'padding:10px 12px;white-space:pre-wrap;word-wrap:break-word;';
+      box.onclick = function () { box.style.display = 'none'; };
+      (doc.body || doc.documentElement).appendChild(box);
+    }
+    box.style.display = 'block';
+    box.textContent = text + ' (tik om te sluiten)';
+  }
+  window.onerror = function (msg, file, line, col) {
+    show('Dashboardfout: ' + msg + ' (regel ' + line + (col ? ':' + col : '') + ')');
+    return false;
+  };
+})();
+</script>
 
 <script>
 /* ==========================================================================
@@ -1646,11 +1676,14 @@ button.tb:active { background: #38424a; }
       }, false);
 
       /* 'input' tijdens het slepen (alleen tekst bijwerken, geen verzoek),
-         'change' pas bij loslaten -> één verzoek per keer dimmen. */
-      function sliderDown() {
+         'change' pas bij loslaten -> één verzoek per keer dimmen.
+         Let op: een functie-expressie (var ... = function), géén
+         functiedeclaratie. Een declaratie in een block is in ES5 strict mode
+         een SyntaxError en dan weigert iOS 9 het hele script. */
+      var sliderDown = function () {
         rec.sliderActive = true;
         rec.lastSlider = nowMs();
-      }
+      };
 
       range.addEventListener('input', function () {
         sliderDown();
