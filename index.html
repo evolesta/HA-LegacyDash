@@ -159,19 +159,54 @@ button.tb:active { background: #38424a; }
 }
 
 /* ------------------------------ kaarten ----------------------------- */
+/* Flexbox met wrap in plaats van alleen floats: de kaarten verdelen zichzelf
+   over de breedte en alle kaarten op één regel krijgen automatisch dezelfde
+   hoogte. Dat laatste is nodig zodra er een helderheidsschuifbalk in een
+   kaart staat (anders gaan de kaarten in een rij "trappen").
+   float blijft staan als terugvaloptie voor een browser zonder flex. */
 #grid {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+  -webkit-align-items: stretch;
+  align-items: stretch;
   padding: 4px 4px 0 4px;
 }
-#grid:after { content: ""; display: block; clear: both; }
 #grid .empty {
+  -webkit-flex: 1 1 100%;
+  flex: 1 1 100%;
   padding: 24px 16px;
   font-size: 15px;
   color: #85929b;
 }
 
+/* Groepskop boven de kaarten van een groep. Neemt een hele regel in beslag,
+   zodat de kaarten van de groep netjes onder de titel beginnen. */
+.gtitle {
+  float: none;                 /* terugvaloptie zonder flex */
+  clear: both;
+  width: 100%;
+  -webkit-flex: 1 1 100%;
+  flex: 1 1 100%;
+  margin: 16px 1% 2px 1%;
+  padding: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #8b98a2;
+  border-bottom: 1px solid #232b31;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#grid .gtitle:first-child { margin-top: 2px; }
+
 .card {
-  float: left;
-  width: 48%;              /* 48% + 2% marge = 50% -> 2 kolommen */
+  float: left;                 /* terugvaloptie zonder flex */
+  -webkit-flex: 0 1 auto;
+  flex: 0 1 auto;
+  width: 47.5%;                /* 47.5% + 2% marge = 49.5% -> 2 kolommen */
   margin: 1%;
   min-height: 108px;
   padding: 12px 14px 10px 14px;
@@ -183,6 +218,14 @@ button.tb:active { background: #38424a; }
   cursor: pointer;
 }
 
+/* Drie kaartmaten: klein (meer op één scherm), normaal en groot (extra
+   leesbaar, bijvoorbeeld de temperatuur op een muur-iPad). De breedtes hier
+   horen bij schermen smaller dan 680px; verderop staat per schermbreedte de
+   hele reeks. Samen met de marge van 1% per kaart komen de kolommen altijd
+   net onder de 100% uit, zodat een rij nooit per ongeluk afbreekt. */
+.card.size-small { width: 31%; }   /* 3 naast elkaar */
+.card.size-large { width: 97%; }   /* 1 per rij, lekker groot */
+
 .card .dot {
   position: absolute;
   top: 12px;
@@ -192,10 +235,38 @@ button.tb:active { background: #38424a; }
   border-radius: 6px;
   background: #3d464d;
 }
+.card .namerow {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  margin: 0 22px 4px 0;
+}
+/* icoontje links van de naam; de kleur volgt de toestand van de kaart */
+.card .ico {
+  -webkit-flex: 0 0 auto;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  color: #6b7883;
+}
+.card .ico svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .card .name {
+  -webkit-flex: 1 1 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 14px;
   color: #93a0a9;
-  margin: 0 22px 4px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -207,6 +278,7 @@ button.tb:active { background: #38424a; }
   letter-spacing: -0.5px;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 .card .sub {
   font-size: 13px;
@@ -221,6 +293,7 @@ button.tb:active { background: #38424a; }
 /* statuskleuren: duidelijke feedback aan/uit */
 .card.on   { background: #10331f; border-color: #2d7a45; }
 .card.on .dot   { background: #45cf7c; }
+.card.on .ico   { color: #45cf7c; }
 .card.on .value { color: #7dffb2; }
 .card.on .name  { color: #9ed8b5; }
 
@@ -233,15 +306,98 @@ button.tb:active { background: #38424a; }
 /* sensoren: geen aan/uit, maar wel duidelijk leesbaar */
 .card.type-sensor { background: #17222b; border-color: #23343f; }
 .card.type-sensor .value { color: #8fd4ff; }
+.card.type-sensor .ico { color: #6fb8e8; }
 
 /* eenmalige acties (scene/script) */
 .card.type-button { background: #212a31; }
 .card.type-button .dot { display: none; }
+.card.type-button .ico { color: #ffd479; }
 .card.type-button .value { font-size: 21px; letter-spacing: 0; color: #ffd479; }
 
-/* grotere schermen: meer kolommen */
-@media (min-width: 680px)  { .card { width: 31.33%; } } /* 3 kolommen */
-@media (min-width: 1000px) { .card { width: 23%; } }    /* 4 kolommen */
+/* Inhoud van de kaart per maat. Deze regels staan bewust ná de regels van de
+   kaarttypes hierboven: de maat moet ook de waarde van een sensor- of
+   scenekaart bepalen. */
+.card.size-small { min-height: 84px; padding: 8px 10px 8px 10px; }
+.card.size-small .namerow { margin: 0 18px 2px 0; }
+.card.size-small .name { font-size: 12px; }
+.card.size-small .ico { width: 14px; height: 14px; margin-right: 4px; }
+.card.size-small .value { font-size: 22px; letter-spacing: -0.3px; }
+.card.size-small .sub { font-size: 11px; height: 14px; }
+.card.size-small .dot { top: 8px; right: 8px; width: 9px; height: 9px; border-radius: 5px; }
+.card.size-small .bright input { min-height: 24px; }
+.card.size-small.type-button .value { font-size: 17px; }
+
+.card.size-large { min-height: 148px; padding: 16px 18px 12px 18px; }
+.card.size-large .namerow { margin: 0 30px 6px 0; }
+.card.size-large .name { font-size: 17px; }
+.card.size-large .ico { width: 24px; height: 24px; margin-right: 8px; }
+.card.size-large .value { font-size: 44px; }
+.card.size-large .sub { font-size: 15px; height: 20px; }
+.card.size-large .dot { top: 16px; right: 16px; width: 13px; height: 13px; border-radius: 7px; }
+.card.size-large .bright input { min-height: 38px; }
+.card.size-large.type-button .value { font-size: 32px; }
+
+/* helderheid: schuifbalk onder in de kaart, alleen bij dimbare lampen.
+   De systeemweergave van de schuifbalk blijft staan: op iOS 9 is die het
+   prettigst te bedienen (grote knop) en ze werkt ook zonder extra CSS. */
+.card .bright { display: none; }
+.card.has-bright .bright {
+  display: block;
+  margin: 2px 0 0 0;
+}
+.card .bright input {
+  display: block;
+  width: 100%;
+  /* min-height en niet height: op iOS 9 houdt de systeemweergave zo zijn
+     natuurlijke (grote) hoogte en blijft de knop goed raakbaar; op desktop,
+     waar de balk maar ~16px hoog is, wordt hij hiermee hoger. */
+  min-height: 30px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+.card .bright input:disabled { opacity: 0.45; }
+
+/* grotere schermen: meer kolommen per maat. De breedtes tellen samen met de
+   marge van 1% per kaart op tot nèt onder de 100%, zodat een rij nooit per
+   ongeluk afbreekt door afronding. */
+@media (min-width: 680px) {
+  .card            { width: 31%; }     /* normaal: 3 kolommen */
+  .card.size-small { width: 22.8%; }   /* klein:   4 kolommen */
+  .card.size-large { width: 47.5%; }   /* groot:   2 kolommen */
+}
+@media (min-width: 1000px) {
+  .card            { width: 22.8%; }   /* normaal: 4 kolommen */
+  .card.size-small { width: 17.8%; }   /* klein:   5 kolommen */
+  .card.size-large { width: 31%; }     /* groot:   3 kolommen */
+}
+@media (min-width: 1360px) {
+  .card            { width: 17.8%; }   /* normaal: 5 kolommen */
+  .card.size-small { width: 14.5%; }   /* klein:   6 kolommen */
+  .card.size-large { width: 22.8%; }   /* groot:   4 kolommen */
+}
+
+/* kleine schermen (telefoon): krappere marges en kleinere letters, maar de
+   aanraakvlakken blijven ruim (minimaal ~150x100 px per kaart). */
+@media (max-width: 479px) {
+  body { font-size: 15px; }
+  .card { margin: 4px; width: 46.5%; padding: 10px 12px 8px 12px; min-height: 96px; }
+  .card.size-small { width: 30.5%; min-height: 80px; padding: 8px 10px 8px 10px; }
+  .card.size-large { width: 97%; }
+  .card .namerow { margin-right: 18px; }
+  .card .name { font-size: 13px; }
+  .gtitle { margin: 12px 4px 2px 4px; font-size: 12px; }
+  .card .value { font-size: 24px; letter-spacing: -0.3px; }
+  .card .sub { font-size: 12px; }
+  .card .dot { top: 10px; right: 10px; }
+  #topbar { min-height: 46px; padding: 6px 8px 2px 8px; }
+  #topbar .title { font-size: 17px; padding: 7px 0 0 2px; }
+  button.tb { min-height: 36px; line-height: 36px; font-size: 14px; padding: 0 10px; margin-left: 4px; }
+  #setup { padding: 12px; }
+  #setup .f2 > div, #setup .f3 > div, #setup .f3 > div:first-child { float: none; width: 100%; }
+  #setup .f2 > div + div, #setup .f3 > div + div { margin-left: 0; }
+  #setup .mini { width: 40px; }
+}
 
 /* ------------------------------ toast ------------------------------- */
 #toast {
@@ -413,6 +569,24 @@ button.tb:active { background: #38424a; }
 }
 #setup .mini.del { color: #ffb4b4; }
 
+/* groepeneditor: één regel per groep, met de titel en de knoppen ernaast */
+#setup .grow {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  margin: 8px 0 0 0;
+}
+#setup .grow input {
+  -webkit-flex: 1 1 auto;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+}
+#setup .grow .gtools { -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+#setup .grow.bad input { border-color: #a04545; }
+
 #setup .erow label { margin: 9px 0 3px 0; }
 #setup .erow input, #setup .erow select {
   -webkit-appearance: none;
@@ -431,8 +605,11 @@ button.tb:active { background: #38424a; }
 #setup .f2:after { content: ""; display: block; clear: both; }
 #setup .f2 > div { float: left; width: 49%; }
 #setup .f2 > div + div { margin-left: 2%; }
-#setup .f3 > div { width: 32%; }
+/* drie velden op één regel (type / grootte / icoon): het eerste veld wat
+   breder, zodat de tekst van de keuzelijst past */
+#setup .f3 > div { width: 29%; }
 #setup .f3 > div + div { margin-left: 2%; }
+#setup .f3 > div:first-child { width: 36%; }
 
 /* Keuzelijsten: appearance:none haalt het systeempijltje weg, dus tekenen we
    er zelf een (data-URI, zodat het één bestand blijft). Deze regel staat
@@ -486,7 +663,23 @@ button.tb:active { background: #38424a; }
   </div>
 
   <div id="tabEntities" style="display:none">
-    <p class="hint"><strong>Schakelaar</strong> = tik aan/uit &middot; <strong>Sensor</strong> = alleen weergeven &middot; <strong>Knop</strong> = scene of script &middot; <strong>Rolluik</strong> = open/dicht.</p>
+    <label for="inSize">Grootte van de kaarten</label>
+    <select id="inSize">
+      <option value="small">Klein (compact, meer op één scherm)</option>
+      <option value="medium">Normaal</option>
+      <option value="large">Groot (extra leesbaar)</option>
+    </select>
+    <p class="hint">Geldt voor alle kaarten. Kies bij een entiteit hieronder "Standaard" om deze maat te gebruiken, of een eigen maat.</p>
+
+    <label>Groepen</label>
+    <p class="hint">Een groep krijgt een eigen titel boven zijn kaarten. Zet de titels hier in de volgorde waarin ze op het dashboard moeten staan en kies bij elke entiteit de groep waar hij bij hoort.</p>
+    <div id="groupList"></div>
+    <div class="row">
+      <button type="button" class="btn-secondary" id="btnAddGroup">+ Groep toevoegen</button>
+    </div>
+
+    <label>Entiteiten</label>
+    <p class="hint"><strong>Schakelaar</strong> = tik aan/uit &middot; <strong>Sensor</strong> = alleen weergeven &middot; <strong>Knop</strong> = scene of script &middot; <strong>Rolluik</strong> = open/dicht.<br>Het icoon kiest het dashboard zelf op basis van het soort entiteit; met <strong>Icoon</strong> zet je het vast.</p>
     <div id="entityList"></div>
     <div class="row">
       <button type="button" class="btn-secondary" id="btnAddEntity">+ Lege entiteit toevoegen</button>
@@ -535,10 +728,32 @@ button.tb:active { background: #38424a; }
        niet via het instellingenscherm wilt werken.
        type 'toggle' : lamp / switch / fan / input_boolean / automation
                        -> tik op de kaart = aan/uit
+                       -> lichtschakelaars (light.*) die kunnen dimmen krijgen
+                          een schuifbalk voor de helderheid zodra ze aan staan
+                       -> een tik op die schuifbalk zet de lamp niet uit
        type 'sensor' : alleen weergeven (temperatuur, vocht, binary_sensor)
        type 'button' : eenmalige actie (scene, script)
        type 'cover'  : rolluik / gordijn -> tik = open/dicht
-       Optioneel per entiteit: name, unit, decimals
+       Optioneel per entiteit: name, unit, decimals, size, icon, group
+       group : de titel van de groep waar deze kaart bij hoort (bv.
+         'Woonkamer'). Een titel die niet in GROUPS staat wordt daar bij het
+         starten automatisch achteraan gezet, dus je mag het hier zo laten.
+       size 'small' | 'medium' | 'large' : grootte van de kaart. Weglaten
+         betekent: de maat die hieronder bij SIZE staat.
+       icon : de naam van een icoontje (zie de lijst ICONS verderop), bv.
+         'bulb', 'thermometer', 'garage'. Weglaten betekent: automatisch. Het
+         dashboard kiest dan zelf iets passends op basis van het domein
+         (light.* = lamp) en, zodra Home Assistant die meldt, de
+         apparaatklasse (device_class 'temperature' = thermometer).
+
+     SIZE   : de standaardmaat van alle kaarten ('small', 'medium' of 'large')
+              als er geen config.json is. In het instellingenscherm is dit per
+              entiteit aan te passen; daar telt deze waarde als "Standaard".
+
+     GROUPS : de volgorde van de groepen op het dashboard (titels). Een entiteit
+              zonder group staat bovenaan, zonder titel. Groepen zonder
+              entiteiten worden niet getoond. In het instellingenscherm voeg je
+              groepen toe, hernoem je ze en zet je ze in de gewenste volgorde.
 
      De waarden hieronder worden bij het starten van de Docker-container
      vervangen door de gelijknamige omgevingsvariabelen HA_URL, HA_TOKEN en
@@ -560,6 +775,12 @@ button.tb:active { background: #38424a; }
     POLL_SECONDS: '${HA_POLL_SECONDS}',
     TIMEOUT_MS: 8000,
 
+    /* 'small' | 'medium' | 'large' */
+    SIZE: 'medium',
+
+    /* volgorde van de groepen op het dashboard (titels) */
+    GROUPS: [],
+
     ENTITIES: [
       { id: 'light.woonkamer',               name: 'Woonkamer',       type: 'toggle' },
       { id: 'light.keuken',                  name: 'Keuken',          type: 'toggle' },
@@ -578,6 +799,7 @@ button.tb:active { background: #38424a; }
   var RUNTIME_PATH = 'runtime.json';
   var STORAGE_KEY  = 'ha-legacy-dashboard-config';
   var MAX_ENTITIES = 40;
+  var MAX_GROUPS   = 20;
   var ENTITY_ID_RE = /^[a-z_]+\.[a-z0-9_]+$/;
 
   var app = {
@@ -585,6 +807,8 @@ button.tb:active { background: #38424a; }
     urlRaw: '',
     token: '',
     pollSeconds: 5,
+    size: 'medium',
+    groups: [],
     entities: [],
     /* 'server' = config.json op de server, 'device' = localStorage */
     mode: 'device',
@@ -598,6 +822,8 @@ button.tb:active { background: #38424a; }
     /* editor-state */
     editEntities: [],
     editRows: [],
+    editGroups: [],
+    groupRows: [],
     pickerById: {},
     pickerLoaded: false
   };
@@ -691,6 +917,23 @@ button.tb:active { background: #38424a; }
     return 'toggle';
   }
 
+  /* Kaartmaat: 'small' / 'medium' / 'large'. Al het andere telt als
+     "niet ingesteld" (lege string), zodat een ontbrekende maat kan erven. */
+  function validSize(s) {
+    if (s === 'small' || s === 'medium' || s === 'large') { return s; }
+    return '';
+  }
+
+  function pickSize(a, b) {
+    return validSize(a) || validSize(b) || 'medium';
+  }
+
+  function sizeWord(s) {
+    if (s === 'small') { return 'klein'; }
+    if (s === 'large') { return 'groot'; }
+    return 'normaal';
+  }
+
   /* Maakt van (mogelijk met de hand geschreven) JSON een schone lijst. */
   function cleanEntities(list) {
     var out = [];
@@ -705,7 +948,42 @@ button.tb:active { background: #38424a; }
       if (hasStr(e, 'unit') && trim(e.unit) !== '') { item.unit = trim(e.unit); }
       var dec = parseInt(e.decimals, 10);
       if (!isNaN(dec) && dec >= 0 && dec <= 4) { item.decimals = dec; }
+      var sz = validSize(e.size);
+      if (sz !== '') { item.size = sz; }
+      var ic = validIcon(e.icon);
+      if (ic !== '') { item.icon = ic; }
+      if (hasStr(e, 'group') && trim(e.group) !== '') { item.group = trim(e.group); }
       out.push(item);
+    }
+    return out;
+  }
+
+  /* Staat de waarde al in de lijst? */
+  function hasItem(list, v) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] === v) { return true; }
+    }
+    return false;
+  }
+
+  /* Groepen: de opgegeven volgorde blijft staan. Een titel die alleen in de
+     entiteitenlijst voorkomt (bijv. een met de hand geschreven config.json)
+     wordt erachter gezet, zodat zo'n groep toch zichtbaar is. */
+  function cleanGroups(list, entities) {
+    var out = [];
+    var i, j, t;
+    if (isList(list)) {
+      for (i = 0; i < list.length && out.length < MAX_GROUPS; i++) {
+        t = trim(list[i]);
+        if (t === '' || hasItem(out, t)) { continue; }
+        out.push(t);
+      }
+    }
+    var ents = entities || [];
+    for (i = 0; i < ents.length && out.length < MAX_GROUPS; i++) {
+      t = trim(ents[i] && ents[i].group);
+      if (t === '' || hasItem(out, t)) { continue; }
+      out.push(t);
     }
     return out;
   }
@@ -743,9 +1021,10 @@ button.tb:active { background: #38424a; }
     var bakedUrl   = envValue(CONFIG.HA_URL);
     var bakedToken = envValue(CONFIG.TOKEN);
     var bakedPoll  = parseInt(envValue(CONFIG.POLL_SECONDS), 10);
+    var bakedSize  = validSize(CONFIG.SIZE);
     var sc = app.serverConfig || {};
     var st = {};
-    var url, token, poll, entities;
+    var url, token, poll, size, groups, entities;
 
     app.mode = (app.runtime && app.runtime.configFile === true) ? 'server' : 'device';
 
@@ -755,21 +1034,27 @@ button.tb:active { background: #38424a; }
       url      = hasStr(sc, 'ha_url') ? sc.ha_url : bakedUrl;
       token    = pickToken(sc.ha_token, bakedToken);
       poll     = pickPoll(sc.poll_seconds, bakedPoll);
+      size     = pickSize(sc.size, bakedSize);
       entities = isList(sc.entities) ? sc.entities : CONFIG.ENTITIES;
+      groups   = isList(sc.groups) ? sc.groups : CONFIG.GROUPS;
     } else {
       var stored = readStored();
       if (stored && typeof stored === 'object') { st = stored; }
       url = hasStr(st, 'ha_url') ? st.ha_url : (hasStr(st, 'url') ? st.url : bakedUrl);
       token = pickToken(hasStr(st, 'ha_token') ? st.ha_token : st.token, bakedToken);
       poll = pickPoll(st.poll_seconds, bakedPoll);
+      size = pickSize(st.size, bakedSize);
       entities = isList(st.entities) ? st.entities : CONFIG.ENTITIES;
+      groups = isList(st.groups) ? st.groups : CONFIG.GROUPS;
     }
 
     app.urlRaw = trim(url);
     app.url = normalizeUrl(url);
     app.token = token;
     app.pollSeconds = poll;
+    app.size = size;
     app.entities = cleanEntities(entities);
+    app.groups = cleanGroups(groups, app.entities);
   }
 
   function storeLocal(payload) {
@@ -984,6 +1269,194 @@ button.tb:active { background: #38424a; }
     return s;
   }
 
+  /* Domein van een entiteit-ID: 'light.woonkamer' -> 'light'. */
+  function domainOf(id) {
+    var s = (id === undefined || id === null) ? '' : String(id);
+    var i = s.indexOf('.');
+    return i > 0 ? s.substring(0, i) : '';
+  }
+
+
+  /* ---------------------------------------------------------------- iconen */
+  /* Lijn-icoontjes als SVG (24x24), rechtstreeks in dit bestand. Geen losse
+     bestanden, geen pictogrammenfont en geen bibliotheek: alles blijft in één
+     bestand dat ook op iOS 9 werkt. De kleur komt van de kaart zelf
+     (currentColor), dus een icoon kleurt groen als de entiteit aan staat. */
+  var ICONS = {
+    /* licht */
+    bulb: '<circle cx="12" cy="8.5" r="5"/><path d="M9.7 14.6h4.6"/><path d="M10.3 17.2h3.4"/><path d="M11 19.8h2"/>',
+    /* schakelaar */
+    toggle: '<rect x="3.5" y="8" width="17" height="8" rx="4"/><circle cx="8.5" cy="12" r="2.4"/>',
+    /* scene, script, knop */
+    play: '<path d="M8.5 5.5 18 12l-9.5 6.5z"/>',
+    /* stroom, verbruik */
+    bolt: '<path d="M13.5 2.5 5.5 13.5h5l-1 8 8-11h-5z"/>',
+    /* temperatuur */
+    thermometer: '<rect x="10.2" y="3.5" width="3.6" height="10.5" rx="1.8"/><circle cx="12" cy="17.5" r="3"/><path d="M12 16.5V8"/><path d="M16.4 8.5h1.6"/><path d="M16.4 12h1.1"/>',
+    /* vocht, water */
+    droplet: '<circle cx="12" cy="15.6" r="4.6"/><path d="M12 4 8.1 14.2"/><path d="M12 4 15.9 14.2"/>',
+    /* zon, lichtsterkte */
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2"/><path d="M12 19.5v2"/><path d="M2.5 12h2"/><path d="M19.5 12h2"/><path d="M5.4 5.4 6.8 6.8"/><path d="M17.2 17.2 18.6 18.6"/><path d="M18.6 5.4 17.2 6.8"/><path d="M6.8 17.2 5.4 18.6"/>',
+    /* algemene meting */
+    activity: '<path d="M2.5 12h4l2.5-6.5 4 13 2.5-6.5h6"/>',
+    /* batterij */
+    battery: '<rect x="2.5" y="7.5" width="16.5" height="9" rx="2"/><path d="M21.5 10.5v3"/><path d="M6 12h6"/>',
+    /* signaalsterkte */
+    signal: '<path d="M4 20v-3.5"/><path d="M9.3 20v-7"/><path d="M14.6 20v-10.5"/><path d="M19.9 20V6"/>',
+    /* rolluik, gordijn */
+    blinds: '<path d="M4 4.5h16"/><path d="M6 4.5v15"/><path d="M18 4.5v15"/><path d="M6 8.5h12"/><path d="M6 12.5h12"/><path d="M6 16.5h12"/>',
+    /* garagedeur */
+    garage: '<path d="M3.5 20V10L12 3.5 20.5 10v10z"/><path d="M7.5 20v-8.5h9V20"/><path d="M7.5 14.5h9"/><path d="M7.5 17.2h9"/>',
+    /* raam */
+    window: '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M12 3.5v17"/><path d="M3.5 12h17"/>',
+    /* deur */
+    door: '<rect x="6" y="3.5" width="12" height="17" rx="1.5"/><circle cx="14.6" cy="12" r="1"/>',
+    /* slot */
+    lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.8h7v2.7"/>',
+    /* automatisering */
+    robot: '<rect x="4.5" y="7.5" width="15" height="11" rx="3"/><circle cx="9.5" cy="12.6" r="1.2"/><circle cx="14.5" cy="12.6" r="1.2"/><path d="M12 7.5V4.4"/><circle cx="12" cy="3.2" r="1"/>',
+    /* alarm, bel */
+    bell: '<path d="M6.5 16.5v-5.7a5.5 5.5 0 0 1 11 0v5.7z"/><path d="M4.5 16.5h15"/><path d="M10.3 19.5a1.9 1.9 0 0 0 3.4 0"/>',
+    /* persoon, beweging */
+    person: '<circle cx="12" cy="7.5" r="3.8"/><path d="M4.8 20.5c0-3.9 3.2-6.3 7.2-6.3s7.2 2.4 7.2 6.3"/>',
+    /* speaker */
+    speaker: '<rect x="5.5" y="3.5" width="13" height="17" rx="2"/><circle cx="12" cy="15" r="3.2"/><circle cx="12" cy="7.5" r="1.2"/>',
+    /* ventilator */
+    fan: '<circle cx="12" cy="12" r="2.2"/><path d="M12 9.8V4"/><path d="M14 12.9 19 16.5"/><path d="M10 12.9 5 16.5"/>',
+    /* onbekend / standaard */
+    dot: '<circle cx="12" cy="12" r="5"/>'
+  };
+
+  /* Welk icoon hoort bij welke apparaatklasse (die komt uit Home Assistant en
+     is specifieker dan het domein: een sensor met device_class 'temperature'
+     krijgt een thermometer, een deursensor een deur). */
+  var ICON_DEVICE_CLASS = {
+    temperature: 'thermometer',
+    humidity: 'droplet',
+    moisture: 'droplet',
+    battery: 'battery',
+    power: 'bolt',
+    energy: 'bolt',
+    power_factor: 'bolt',
+    current: 'bolt',
+    voltage: 'bolt',
+    illuminance: 'sun',
+    signal_strength: 'signal',
+    motion: 'person',
+    occupancy: 'person',
+    presence: 'person',
+    door: 'door',
+    garage: 'garage',
+    garage_door: 'garage',
+    window: 'window',
+    opening: 'window',
+    lock: 'lock',
+    blind: 'blinds',
+    shade: 'blinds',
+    shutter: 'blinds',
+    curtain: 'blinds',
+    damper: 'blinds',
+    awning: 'blinds',
+    gate: 'blinds'
+  };
+
+  /* Anders kijken we naar het domein van de entiteit. */
+  var ICON_DOMAIN = {
+    light: 'bulb',
+    switch: 'toggle',
+    input_boolean: 'toggle',
+    fan: 'fan',
+    vacuum: 'fan',
+    media_player: 'speaker',
+    cover: 'blinds',
+    scene: 'play',
+    script: 'play',
+    button: 'play',
+    input_button: 'play',
+    automation: 'robot',
+    lock: 'lock',
+    siren: 'bell',
+    alarm_control_panel: 'bell',
+    person: 'person',
+    device_tracker: 'person',
+    climate: 'thermometer',
+    humidifier: 'droplet',
+    sensor: 'activity',
+    binary_sensor: 'dot',
+    weather: 'sun',
+    sun: 'sun'
+  };
+
+  /* Een eigen keuze uit de instellingen wint; anders raden we het icoon. */
+  function validIcon(v) {
+    return (typeof v === 'string' && typeof ICONS[v] === 'string') ? v : '';
+  }
+
+  function guessIcon(cfgItem, attrs) {
+    var dc = (attrs && typeof attrs.device_class === 'string') ? attrs.device_class : '';
+    var byDc = ICON_DEVICE_CLASS[dc];
+    if (typeof byDc === 'string') { return byDc; }
+
+    var byDomain = ICON_DOMAIN[domainOf(cfgItem.id)];
+    if (typeof byDomain === 'string') { return byDomain; }
+
+    if (cfgItem.type === 'sensor') { return 'activity'; }
+    if (cfgItem.type === 'cover') { return 'blinds'; }
+    if (cfgItem.type === 'button') { return 'play'; }
+    return 'toggle';
+  }
+
+  function iconName(cfgItem, attrs) {
+    var own = validIcon(cfgItem.icon);
+    return own !== '' ? own : guessIcon(cfgItem, attrs);
+  }
+
+  function setIcon(el, name) {
+    var key = validIcon(name);
+    if (key === '') { key = 'dot'; }
+    el.setAttribute('data-icon', key);
+    /* innerHTML op een gewoon HTML-element: de browser zet de SVG zelf in de
+       juiste naamruimte, ook op iOS 9. */
+    el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      ICONS[key] + '</svg>';
+  }
+
+  function makeIcon(name) {
+    var el = makeEl('span', 'ico');
+    setIcon(el, name);
+    return el;
+  }
+
+  /* Ondersteunt deze lamp dimmen? Home Assistant stuurt dat op drie manieren,
+     afhankelijk van de versie. We accepteren ze alle drie. */
+  function supportsBrightness(attrs) {
+    if (!attrs) { return false; }
+    var modes = attrs.supported_color_modes;
+    var i;
+    if (isList(modes)) {
+      /* nieuw: alles behalve 'onoff' betekent dimbaar */
+      for (i = 0; i < modes.length; i++) {
+        if (modes[i] !== 'onoff') { return true; }
+      }
+      return false;
+    }
+    if (typeof attrs.supported_features === 'number') {
+      /* oud: bit 0 = SUPPORT_BRIGHTNESS */
+      return (attrs.supported_features & 1) === 1;
+    }
+    /* oudste: alleen de aanwezigheid van brightness zegt iets */
+    return typeof attrs.brightness === 'number';
+  }
+
+  /* brightness (0-255) -> percentage 1..100, of 0 als onbekend/uit. */
+  function brightnessPct(attrs) {
+    if (!attrs || typeof attrs.brightness !== 'number' || attrs.brightness <= 0) { return 0; }
+    var p = Math.round(attrs.brightness / 255 * 100);
+    if (p < 1) { p = 1; }
+    if (p > 100) { p = 100; }
+    return p;
+  }
+
   function extraInfo(attrs) {
     if (typeof attrs.brightness === 'number' && attrs.brightness > 0) {
       return 'Helderheid ' + Math.round(attrs.brightness / 255 * 100) + '%';
@@ -1001,6 +1474,14 @@ button.tb:active { background: #38424a; }
     rec.raw = st.state;
     rec.attrs = st.attributes || {};
 
+    /* Pas nu is de apparaatklasse bekend: daarmee kiezen we het icoon
+       (tenzij de gebruiker er zelf een gekozen heeft). */
+    var wantIcon = iconName(rec.cfg, rec.attrs);
+    if (wantIcon !== rec.iconName) {
+      rec.iconName = wantIcon;
+      if (rec.iconEl) { setIcon(rec.iconEl, wantIcon); }
+    }
+
     var raw = rec.raw;
     var attrs = rec.attrs;
     var unavailable = (raw === 'unavailable' || raw === 'unknown' || raw === null || raw === undefined);
@@ -1008,6 +1489,13 @@ button.tb:active { background: #38424a; }
     var sub = '';
     var mode = 'unknown';
     var i;
+
+    /* De helderheidsschuifbalk standaard verbergen; alleen de tak hieronder
+       die hem echt kan tonen zet hem weer aan. */
+    if (rec.brightInput) {
+      rec.showBright = false;
+      rec.brightInput.disabled = true;
+    }
 
     /* naam pas invullen zodra HA de friendly_name stuurt */
     if (!rec.cfg.name && attrs.friendly_name) {
@@ -1057,6 +1545,21 @@ button.tb:active { background: #38424a; }
         mode = on ? 'on' : 'off';
         value = on ? 'AAN' : 'UIT';
         sub = extraInfo(attrs);
+
+        /* Dimbare lamp die aan staat krijgt de schuifbalk. Staat hij uit, dan
+           is er niets te dimmen: dan blijft de balk verborgen (tik eerst op de
+           kaart om hem aan te zetten). */
+        if (rec.brightInput) {
+          var dimmable = supportsBrightness(attrs);
+          rec.showBright = (dimmable && on);
+          if (rec.showBright) {
+            rec.brightInput.disabled = false;
+            if (!rec.sliderActive) {
+              var pct = brightnessPct(attrs);
+              rec.brightInput.value = String(pct > 0 ? pct : 100);
+            }
+          }
+        }
       }
     }
 
@@ -1067,8 +1570,9 @@ button.tb:active { background: #38424a; }
   }
 
   function renderCardClass(rec) {
-    var c = 'card type-' + rec.type;
+    var c = 'card type-' + rec.type + ' size-' + (rec.size || 'medium');
     if (rec.mode) { c = c + ' ' + rec.mode; }
+    if (rec.showBright) { c = c + ' has-bright'; }
     if (rec.pendingUntil > nowMs()) { c = c + ' pending'; }
     if (rec.flashing) { c = c + ' flash'; }
     rec.el.className = c;
@@ -1081,7 +1585,11 @@ button.tb:active { background: #38424a; }
     var rec = {
       cfg: cfgItem,
       type: cfgItem.type || 'toggle',
+      /* eigen maat, anders de maat van het hele dashboard */
+      size: validSize(cfgItem.size) || app.size || 'medium',
       el: null, nameEl: null, valueEl: null, subEl: null,
+      brightEl: null, brightInput: null,
+      showBright: false, sliderActive: false,
       mode: 'unknown',
       raw: null,
       attrs: {},
@@ -1090,23 +1598,78 @@ button.tb:active { background: #38424a; }
       prevRaw: undefined
     };
 
-    var el = makeEl('div', 'card type-' + rec.type);
+    var el = makeEl('div', 'card type-' + rec.type + ' size-' + rec.size);
     el.setAttribute('role', 'button');
 
     var dot = makeEl('span', 'dot');
+    var nameRow = makeEl('div', 'namerow');
+    var iconEl = makeIcon(iconName(cfgItem, null));
     var nameEl = makeEl('div', 'name', cfgItem.name || cfgItem.id);
+    nameRow.appendChild(iconEl);
+    nameRow.appendChild(nameEl);
     var valueEl = makeEl('div', 'value', '--');
     var subEl = makeEl('div', 'sub', '');
 
     el.appendChild(dot);
-    el.appendChild(nameEl);
+    el.appendChild(nameRow);
     el.appendChild(valueEl);
     el.appendChild(subEl);
 
     rec.el = el;
+    rec.iconEl = iconEl;
+    rec.iconName = validIcon(cfgItem.icon) || guessIcon(cfgItem, null);
     rec.nameEl = nameEl;
     rec.valueEl = valueEl;
     rec.subEl = subEl;
+
+    /* Lampen krijgen een helderheidsschuifbalk in de kaart. Of die ook echt
+       te zien is, hangt af van wat Home Assistant over de lamp meldt (zie
+       applyState). */
+    if (rec.type === 'toggle' && domainOf(cfgItem.id) === 'light') {
+      var brightEl = makeEl('div', 'bright');
+      var range = makeEl('input');
+      range.type = 'range';
+      range.min = '1';
+      range.max = '100';
+      range.step = '1';
+      range.value = '100';
+      range.setAttribute('aria-label', 'Helderheid');
+      brightEl.appendChild(range);
+      el.appendChild(brightEl);
+
+      rec.brightEl = brightEl;
+      rec.brightInput = range;
+
+      /* Een tik op de schuifbalk mag de kaart niet aan-/uitzetten. */
+      range.addEventListener('click', function (ev) {
+        if (ev && ev.stopPropagation) { ev.stopPropagation(); }
+      }, false);
+
+      /* 'input' tijdens het slepen (alleen tekst bijwerken, geen verzoek),
+         'change' pas bij loslaten -> één verzoek per keer dimmen. */
+      function sliderDown() {
+        rec.sliderActive = true;
+        rec.lastSlider = nowMs();
+      }
+
+      range.addEventListener('input', function () {
+        sliderDown();
+        setBrightLabel(rec, parseInt(range.value, 10));
+      }, false);
+
+      range.addEventListener('change', function () {
+        sliderDown();
+        rec.sliderActive = false;
+        applyBrightness(rec, parseInt(range.value, 10));
+      }, false);
+
+      /* Vangnet: als er geen 'change' komt (tik zonder verschuiven), mag een
+         poll de knop na een seconde weer gewoon bijwerken. */
+      range.addEventListener('touchstart', sliderDown, false);
+      range.addEventListener('mousedown', sliderDown, false);
+      range.addEventListener('touchend', function () { releaseSlider(rec); }, false);
+      range.addEventListener('mouseup', function () { releaseSlider(rec); }, false);
+    }
 
     /* 'click' werkt op iOS 9 prima bij grote touch-targets */
     el.addEventListener('click', function () { handleTap(rec); }, false);
@@ -1125,19 +1688,82 @@ button.tb:active { background: #38424a; }
       return;
     }
 
-    for (var i = 0; i < list.length; i++) {
-      var rec = buildCard(list[i]);
+    /* Kaartje toevoegen: het simpele werk, zodat het hieronder overzichtelijk
+       blijft. */
+    function addCard(item) {
+      var rec = buildCard(item);
       app.cards.push(rec);
       dom.grid.appendChild(rec.el);
+    }
+
+    var i, j;
+
+    /* 1. entiteiten zonder groep: gewoon bovenaan, zonder titel */
+    for (i = 0; i < list.length; i++) {
+      if (!list[i].group) { addCard(list[i]); }
+    }
+
+    /* 2. daarna elke groep in de ingestelde volgorde, met een titel erboven.
+          Een groep zonder entiteiten slaan we over. */
+    for (j = 0; j < app.groups.length; j++) {
+      var title = app.groups[j];
+      var count = 0;
+      for (i = 0; i < list.length; i++) {
+        if (list[i].group === title) { count++; }
+      }
+      if (count === 0) { continue; }
+      dom.grid.appendChild(makeEl('div', 'gtitle', title));
+      for (i = 0; i < list.length; i++) {
+        if (list[i].group === title) { addCard(list[i]); }
+      }
     }
   }
 
 
   /* -------------------------------------------------------------- acties */
 
+  /* Na het loslaten van de schuifbalk mag een poll de knop weer bijwerken. */
+  function releaseSlider(rec) {
+    window.setTimeout(function () { rec.sliderActive = false; }, 800);
+  }
+
+  /* Tijdens het slepen: alleen het percentage in de kaart bijwerken. */
+  function setBrightLabel(rec, pct) {
+    if (typeof pct !== 'number' || isNaN(pct)) { return; }
+    if (rec.attrs && rec.mode === 'on') {
+      rec.attrs.brightness = Math.round(pct * 255 / 100);
+      rec.subEl.textContent = 'Helderheid ' + pct + '%';
+    }
+  }
+
+  /* Loslaten van de schuifbalk: percentage naar Home Assistant sturen.
+     We sturen 'brightness' (0-255) en niet 'brightness_pct': die laatste
+     bestaat pas sinds HA 0.110, brightness werkt altijd. */
+  function applyBrightness(rec, pct) {
+    if (typeof pct !== 'number' || isNaN(pct)) { return; }
+    if (pct < 1) { pct = 1; }
+    if (pct > 100) { pct = 100; }
+
+    var b = Math.round(pct * 255 / 100);
+    if (b < 1) { b = 1; }
+
+    rec.attrs = rec.attrs || {};
+    rec.attrs.brightness = b;
+    rec.mode = 'on';
+    rec.showBright = true;
+    rec.pendingUntil = nowMs() + 3000;
+
+    if (rec.subEl) { rec.subEl.textContent = 'Helderheid ' + pct + '%'; }
+    renderCardClass(rec);
+
+    callService('light', 'turn_on', { entity_id: rec.cfg.id, brightness: b }, rec, true);
+  }
+
   function handleTap(rec) {
     if (rec.type === 'sensor') { return; }                  /* alleen lezen */
     if (rec.pendingUntil > nowMs()) { return; }              /* al bezig */
+    /* vangnet: net aan de schuifbalk gezeten -> niet ook aan/uit zetten */
+    if (rec.lastSlider && (nowMs() - rec.lastSlider) < 700) { return; }
 
     /* eenmalige actie (scene / script) */
     if (rec.type === 'button') {
@@ -1170,7 +1796,10 @@ button.tb:active { background: #38424a; }
     callService('homeassistant', wantOn ? 'turn_on' : 'turn_off', { entity_id: rec.cfg.id }, rec);
   }
 
-  function callService(domain, service, data, rec) {
+  /* keepState: bij het dimmen mag een foutmelding de aan/uit-stand niet
+     terugdraaien (die is niet veranderd); we halen dan gewoon de echte waarde
+     weer op. Bij aan/uit/rolluik draaien we de optimistische stand terug. */
+  function callService(domain, service, data, rec, keepState) {
     apiRequest('POST', '/api/services/' + domain + '/' + service, data,
       function () {
         if (rec) {
@@ -1180,10 +1809,14 @@ button.tb:active { background: #38424a; }
       },
       function (status) {
         if (rec) {
-          /* mislukt: optimistische weergave terugdraaien */
           rec.pendingUntil = 0;
-          if (rec.prevRaw !== undefined && rec.prevRaw !== null) { rec.raw = rec.prevRaw; }
-          applyState(rec, { state: rec.raw, attributes: rec.attrs });
+          if (keepState) {
+            refreshEntity(rec, 0);
+          } else {
+            /* mislukt: optimistische weergave terugdraaien */
+            if (rec.prevRaw !== undefined && rec.prevRaw !== null) { rec.raw = rec.prevRaw; }
+            applyState(rec, { state: rec.raw, attributes: rec.attrs });
+          }
         }
         toast(status === 0 ? 'Actie mislukt: geen verbinding' : 'Actie mislukt (HTTP ' + status + ')');
       }
@@ -1251,6 +1884,7 @@ button.tb:active { background: #38424a; }
     dom.inUrl.value = app.urlRaw;
     dom.inToken.value = '';
     dom.inPoll.value = String(app.pollSeconds);
+    dom.inSize.value = validSize(app.size) || 'medium';
     if (app.urlRaw === '') {
       dom.urlHint.textContent = (app.url !== '')
         ? 'Leeg gelaten: er wordt automatisch ' + app.url + ' gebruikt (het adres waarop deze pagina staat).'
@@ -1283,6 +1917,7 @@ button.tb:active { background: #38424a; }
 
     dom.btnReset.style.display = (app.mode === 'device') ? 'block' : 'none';
 
+    renderGroupList(app.groups);
     renderEntityList(app.entities);
     showTab('conn');
     dom.setup.style.display = 'block';
@@ -1303,6 +1938,9 @@ button.tb:active { background: #38424a; }
     var c = { id: e.id, name: e.name, type: e.type };
     if (e.unit !== undefined) { c.unit = e.unit; }
     if (e.decimals !== undefined) { c.decimals = e.decimals; }
+    if (e.size !== undefined) { c.size = e.size; }
+    if (e.icon !== undefined) { c.icon = e.icon; }
+    if (e.group !== undefined) { c.group = e.group; }
     return c;
   }
 
@@ -1337,6 +1975,116 @@ button.tb:active { background: #38424a; }
     return sel;
   }
 
+  /* Icoonkeuze per entiteit. Leeg = "Automatisch": dan raadt het dashboard een
+     passend icoon op basis van het domein en de apparaatklasse. */
+  function makeIconSelect(value) {
+    var sel = makeEl('select');
+    var auto = makeEl('option', null, 'Automatisch');
+    auto.value = '';
+    sel.appendChild(auto);
+
+    var groups = [
+      ['Licht & schakelaars', [
+        ['bulb', 'Lamp'],
+        ['toggle', 'Schakelaar'],
+        ['play', 'Scene of script'],
+        ['bolt', 'Stroom / verbruik'],
+        ['fan', 'Ventilator']
+      ]],
+      ['Klimaat & sensoren', [
+        ['thermometer', 'Thermometer'],
+        ['droplet', 'Vocht / water'],
+        ['sun', 'Zon / lichtsterkte'],
+        ['activity', 'Meting (grafiek)'],
+        ['battery', 'Batterij'],
+        ['signal', 'Signaalsterkte']
+      ]],
+      ['Ramen & deuren', [
+        ['blinds', 'Rolluik / gordijn'],
+        ['garage', 'Garagedeur'],
+        ['window', 'Raam'],
+        ['door', 'Deur'],
+        ['lock', 'Slot']
+      ]],
+      ['Overig', [
+        ['robot', 'Automatisering'],
+        ['bell', 'Alarm / bel'],
+        ['person', 'Persoon / beweging'],
+        ['speaker', 'Speaker'],
+        ['dot', 'Stip (standaard)']
+      ]]
+    ];
+
+    for (var g = 0; g < groups.length; g++) {
+      var og = makeEl('optgroup');
+      og.setAttribute('label', groups[g][0]);
+      var list = groups[g][1];
+      for (var i = 0; i < list.length; i++) {
+        var o = makeEl('option', null, list[i][1]);
+        o.value = list[i][0];
+        og.appendChild(o);
+      }
+      sel.appendChild(og);
+    }
+
+    sel.value = validIcon(value);
+    return sel;
+  }
+
+  /* Maat per entiteit. Leeg = "Standaard": dan geldt de algemene maat.
+     Let op: die algemene maat kan in het scherm alvast anders staan dan de
+     opgeslagen waarde (app.size); het label volgt de keuzelijst. */
+  function currentSetupSize() {
+    if (dom.inSize) { return validSize(dom.inSize.value) || validSize(app.size) || 'medium'; }
+    return validSize(app.size) || 'medium';
+  }
+
+  function makeSizeSelect(value) {
+    var sel = makeEl('select');
+    var opts = [
+      ['', 'Standaard (' + sizeWord(currentSetupSize()) + ')'],
+      ['small', 'Klein'],
+      ['medium', 'Normaal'],
+      ['large', 'Groot']
+    ];
+    for (var i = 0; i < opts.length; i++) {
+      var o = makeEl('option', null, opts[i][1]);
+      o.value = opts[i][0];
+      sel.appendChild(o);
+    }
+    sel.value = validSize(value);
+    return sel;
+  }
+
+  /* Groepkeuze per entiteit: "Geen" of een van de groepen hierboven. */
+  function fillGroupSelect(sel, value) {
+    clearEl(sel);
+    var seen = [];
+    var none = makeEl('option', null, 'Geen');
+    none.value = '';
+    sel.appendChild(none);
+    for (var i = 0; i < app.editGroups.length; i++) {
+      var t = trim(app.editGroups[i]);
+      if (t === '' || hasItem(seen, t)) { continue; }
+      seen.push(t);
+      var o = makeEl('option', null, t);
+      o.value = t;
+      sel.appendChild(o);
+    }
+    var want = trim(value);
+    var known = false;
+    for (i = 1; i < sel.options.length; i++) {
+      if (sel.options[i].value === want) { known = true; break; }
+    }
+    sel.value = known ? want : '';
+  }
+
+  function makeGroupSelect(value) {
+    var sel = makeEl('select');
+    fillGroupSelect(sel, value);
+    return sel;
+  }
+
   function buildEntityRow(e, index) {
     var wrap = makeEl('div', 'erow');
 
@@ -1363,24 +2111,42 @@ button.tb:active { background: #38424a; }
     head.appendChild(tools);
     wrap.appendChild(head);
 
-    var f2 = makeEl('div', 'f2');
+    var rowId = makeEl('div', 'f2');
     var idF = makeField('Entiteit-ID', 'light.woonkamer', e.id);
     var nameF = makeField('Naam', 'Woonkamer', e.name);
-    f2.appendChild(idF.wrap);
-    f2.appendChild(nameF.wrap);
-    wrap.appendChild(f2);
+    rowId.appendChild(idF.wrap);
+    rowId.appendChild(nameF.wrap);
+    wrap.appendChild(rowId);
 
-    var f3 = makeEl('div', 'f2 f3');
+    var rowType = makeEl('div', 'f2 f3');
     var typeWrap = makeEl('div');
     typeWrap.appendChild(makeEl('label', null, 'Type'));
     var typeSel = makeTypeSelect(e.type);
     typeWrap.appendChild(typeSel);
+    var sizeWrap = makeEl('div');
+    sizeWrap.appendChild(makeEl('label', null, 'Grootte'));
+    var sizeSel = makeSizeSelect(e.size);
+    sizeWrap.appendChild(sizeSel);
+    var iconWrap = makeEl('div');
+    iconWrap.appendChild(makeEl('label', null, 'Icoon'));
+    var iconSel = makeIconSelect(e.icon);
+    iconWrap.appendChild(iconSel);
+    rowType.appendChild(typeWrap);
+    rowType.appendChild(sizeWrap);
+    rowType.appendChild(iconWrap);
+    wrap.appendChild(rowType);
+
+    var rowUnit = makeEl('div', 'f2 f3');
+    var groupWrap = makeEl('div');
+    groupWrap.appendChild(makeEl('label', null, 'Groep'));
+    var groupSel = makeGroupSelect(e.group);
+    groupWrap.appendChild(groupSel);
     var unitF = makeField('Eenheid (sensor)', 'bijv. \u00b0C', e.unit);
     var decF = makeField('Decimalen', 'bijv. 1', (e.decimals === undefined ? '' : e.decimals));
-    f3.appendChild(typeWrap);
-    f3.appendChild(unitF.wrap);
-    f3.appendChild(decF.wrap);
-    wrap.appendChild(f3);
+    rowUnit.appendChild(groupWrap);
+    rowUnit.appendChild(unitF.wrap);
+    rowUnit.appendChild(decF.wrap);
+    wrap.appendChild(rowUnit);
 
     function syncTitle() {
       title.textContent = trim(nameF.input.value) || trim(idF.input.value) || 'Nieuwe entiteit';
@@ -1395,6 +2161,9 @@ button.tb:active { background: #38424a; }
       idInput: idF.input,
       nameInput: nameF.input,
       typeSelect: typeSel,
+      sizeSelect: sizeSel,
+      iconSelect: iconSel,
+      groupSelect: groupSel,
       unitInput: unitF.input,
       decInput: decF.input
     };
@@ -1429,6 +2198,9 @@ button.tb:active { background: #38424a; }
       e.id = trim(row.idInput.value);
       e.name = trim(row.nameInput.value);
       e.type = validType(row.typeSelect.value);
+      e.size = validSize(row.sizeSelect.value);
+      e.icon = validIcon(row.iconSelect.value);
+      e.group = trim(row.groupSelect.value);
       e.unit = trim(row.unitInput.value);
       var dec = trim(row.decInput.value);
       if (dec === '') {
@@ -1466,6 +2238,158 @@ button.tb:active { background: #38424a; }
     commitRows();
     app.editEntities.splice(index, 1);
     drawEntityList();
+  }
+
+  /* -------------------------------------------------- groepeneditor ------ */
+
+  function buildGroupRow(title, index) {
+    var wrap = makeEl('div', 'grow');
+    var inp = makeEl('input');
+    inp.type = 'text';
+    inp.value = title;
+    inp.placeholder = 'Titel van de groep, bijv. Woonkamer';
+    inp.setAttribute('autocapitalize', 'sentences');
+    inp.setAttribute('autocorrect', 'off');
+    inp.setAttribute('spellcheck', 'false');
+
+    var tools = makeEl('span', 'gtools');
+    var up = makeEl('button', 'mini', '\u2191');
+    up.title = 'Omhoog';
+    up.onclick = function () { moveGroup(index, -1); };
+    var down = makeEl('button', 'mini', '\u2193');
+    down.title = 'Omlaag';
+    down.onclick = function () { moveGroup(index, 1); };
+    var del = makeEl('button', 'mini del', '\u2715');
+    del.title = 'Groep verwijderen';
+    del.onclick = function () { removeGroup(index); };
+    tools.appendChild(up);
+    tools.appendChild(down);
+    tools.appendChild(del);
+
+    wrap.appendChild(inp);
+    wrap.appendChild(tools);
+    /* Bij het verlaten van het veld de nieuwe titel meteen doorgeven aan de
+       keuzelijstjes bij de entiteiten. */
+    inp.onchange = function () { commitGroups(); refreshGroupSelects(); };
+    app.groupRows.push({ el: wrap, input: inp, orig: title });
+    return wrap;
+  }
+
+  function renderGroupList(list) {
+    app.editGroups = [];
+    for (var i = 0; i < list.length; i++) { app.editGroups.push(list[i]); }
+    drawGroupList();
+  }
+
+  function drawGroupList() {
+    clearEl(dom.groupList);
+    app.groupRows = [];
+    if (app.editGroups.length === 0) {
+      dom.groupList.appendChild(makeEl('p', 'hint',
+        'Nog geen groepen. Zonder groepen staan alle kaarten gewoon onder elkaar.'));
+      return;
+    }
+    for (var i = 0; i < app.editGroups.length; i++) {
+      dom.groupList.appendChild(buildGroupRow(app.editGroups[i], i));
+    }
+  }
+
+  /* Leest de groepstitels uit de invoervelden. Een gewijzigde titel verhuist
+     mee naar de entiteiten die erbij hoorden; een leeggemaakte titel laat die
+     entiteiten weer zonder groep achter. */
+  function commitGroups() {
+    commitRows();
+    var i, j;
+    for (i = 0; i < app.groupRows.length; i++) {
+      var oud = app.groupRows[i].orig;
+      var nieuw = trim(app.groupRows[i].input.value);
+      if (oud === '' || oud === nieuw) { continue; }
+      for (j = 0; j < app.editEntities.length; j++) {
+        if (trim(app.editEntities[j].group) === oud) { app.editEntities[j].group = nieuw; }
+      }
+    }
+    var titles = [];
+    for (i = 0; i < app.groupRows.length; i++) {
+      var t = trim(app.groupRows[i].input.value);
+      app.groupRows[i].orig = t;
+      titles.push(t);
+    }
+    app.editGroups = titles;
+  }
+
+  /* Werkt alleen de keuzelijstjes "Groep" in de entiteitenrijen bij. */
+  function refreshGroupSelects() {
+    for (var i = 0; i < app.editRows.length; i++) {
+      var row = app.editRows[i];
+      var e = app.editEntities[i];
+      if (!row || !row.groupSelect) { continue; }
+      fillGroupSelect(row.groupSelect, e ? e.group : '');
+    }
+  }
+
+  function addGroup() {
+    commitGroups();
+    if (app.editGroups.length >= MAX_GROUPS) {
+      toast('Maximaal ' + MAX_GROUPS + ' groepen');
+      return;
+    }
+    app.editGroups.push('');
+    drawGroupList();
+    var last = app.groupRows[app.groupRows.length - 1];
+    if (last && last.input.focus) { last.input.focus(); }
+  }
+
+  function moveGroup(index, delta) {
+    commitGroups();
+    var target = index + delta;
+    if (target < 0 || target >= app.editGroups.length) { return; }
+    var tmp = app.editGroups[index];
+    app.editGroups[index] = app.editGroups[target];
+    app.editGroups[target] = tmp;
+    drawGroupList();
+  }
+
+  function removeGroup(index) {
+    commitGroups();
+    var t = app.editGroups[index];
+    if (t) {
+      for (var i = 0; i < app.editEntities.length; i++) {
+        if (trim(app.editEntities[i].group) === t) { app.editEntities[i].group = ''; }
+      }
+    }
+    app.editGroups.splice(index, 1);
+    drawGroupList();
+    drawEntityList();
+  }
+
+  /* De groepen die opgeslagen worden: zonder lege titels, zonder dubbelen. */
+  function collectGroups() {
+    var out = [];
+    for (var i = 0; i < app.groupRows.length; i++) {
+      var t = trim(app.groupRows[i].input.value);
+      if (t !== '' && !hasItem(out, t)) { out.push(t); }
+    }
+    return out;
+  }
+
+  /* Dubbele titels kunnen niet: dan is niet duidelijk welke groep bedoeld is. */
+  function validateGroups() {
+    var errors = [];
+    var seen = [];
+    for (var i = 0; i < app.groupRows.length; i++) {
+      var row = app.groupRows[i];
+      var t = trim(row.input.value);
+      var bad = false;
+      if (t !== '') {
+        if (hasItem(seen, t)) {
+          bad = true;
+          errors.push('Groep ' + (i + 1) + ': "' + t + '" staat er al');
+        }
+        seen.push(t);
+      }
+      row.el.className = bad ? 'grow bad' : 'grow';
+    }
+    return errors;
   }
 
   /* ---------------------------------------------------------- HA-picker -- */
@@ -1591,6 +2515,9 @@ button.tb:active { background: #38424a; }
         var n = parseInt(e.decimals, 10);
         if (!isNaN(n) && n >= 0 && n <= 4) { item.decimals = n; }
       }
+      if (validSize(e.size) !== '') { item.size = e.size; }
+      if (validIcon(e.icon) !== '') { item.icon = e.icon; }
+      if (e.group && trim(e.group) !== '') { item.group = trim(e.group); }
       out.push(item);
     }
     return out;
@@ -1623,6 +2550,9 @@ button.tb:active { background: #38424a; }
   }
 
   function saveSettings() {
+    /* Eerst de invoervelden teruglezen: ook een zojuist hernoemde groep moet
+       meetellen voordat we de entiteiten vastleggen. */
+    commitGroups();
     var ents   = collectEntities();
     var url    = trim(dom.inUrl.value);
     var tokInp = trim(dom.inToken.value);
@@ -1644,11 +2574,19 @@ button.tb:active { background: #38424a; }
       toast(errs[0]);
       return;
     }
+    var gerrs = validateGroups();
+    if (gerrs.length) {
+      showTab('entities');
+      toast(gerrs[0]);
+      return;
+    }
 
     var payload = {
       version: 1,
       ha_url: url,
       poll_seconds: poll,
+      size: validSize(dom.inSize.value) || 'medium',
+      groups: collectGroups(),
       entities: ents
     };
     /* Token alleen in het bestand zetten als er iets nieuws is ingevuld of als
@@ -1693,6 +2631,8 @@ button.tb:active { background: #38424a; }
     dom.inUrl.value = app.urlRaw;
     dom.inToken.value = '';
     dom.inPoll.value = String(app.pollSeconds);
+    dom.inSize.value = validSize(app.size) || 'medium';
+    renderGroupList(app.groups);
     renderEntityList(app.entities);
     toast('Opgeslagen gegevens gewist');
   }
@@ -1756,6 +2696,7 @@ button.tb:active { background: #38424a; }
     dom.urlHint     = document.getElementById('urlHint');
     dom.inToken     = document.getElementById('inToken');
     dom.inPoll      = document.getElementById('inPoll');
+    dom.inSize      = document.getElementById('inSize');
     dom.tokenHint   = document.getElementById('tokenHint');
     dom.infoBox     = document.getElementById('infoBox');
     dom.tabConn     = document.getElementById('tabConn');
@@ -1763,6 +2704,7 @@ button.tb:active { background: #38424a; }
     dom.tabBtnConn  = document.getElementById('tabBtnConn');
     dom.tabBtnEntities = document.getElementById('tabBtnEntities');
     dom.entityList  = document.getElementById('entityList');
+    dom.groupList   = document.getElementById('groupList');
     dom.entityPicker = document.getElementById('entityPicker');
     dom.btnReset    = document.getElementById('btnReset');
 
@@ -1778,10 +2720,13 @@ button.tb:active { background: #38424a; }
     document.getElementById('btnSave').onclick     = function () { saveSettings(); };
     document.getElementById('btnCancel').onclick   = function () { closeSetup(); };
     document.getElementById('btnAddEntity').onclick = function () { addEntityRow(); };
+    document.getElementById('btnAddGroup').onclick  = function () { addGroup(); };
     dom.btnReset.onclick     = function () { resetSetup(); };
     dom.tabBtnConn.onclick   = function () { showTab('conn'); };
     dom.tabBtnEntities.onclick = function () { showTab('entities'); loadPicker(); };
     dom.entityPicker.onchange = function () { onPickerChange(); };
+    /* De labels "Standaard (…)" in de rijen meeveranderen met de algemene maat. */
+    dom.inSize.onchange = function () { commitGroups(); drawEntityList(); };
 
     setupVisibility();
 
